@@ -41,6 +41,15 @@ description: >
 - Brand/non-brand campaigns separated
 - Geographic targeting precise (no wasted international spend)
 
+**Negative Keyword Rules (critical — bad negatives kill campaigns):**
+- NEVER suggest Broad Match negatives unless explicitly justified — they block too broadly
+- Default to **Exact Match** `[keyword]` for specific irrelevant queries
+- Use **Phrase Match** `"keyword"` for irrelevant intent patterns
+- Source negatives from actual Search Terms Report irrelevant queries, NOT guesses
+- Group into themed lists: Informational (how-to, DIY, what is), Job-seeker (jobs, careers, salary), Competitor (only if intentionally excluded), Free-intent (free, crack, torrent)
+- Recommend **Shared Negative Lists** at the account level — not just campaign-level
+- Review existing negatives for over-blocking (are any negatives accidentally blocking converting queries?)
+
 ### Account Structure (15% weight)
 - Campaign-level organization follows business logic
 - Ad groups themed tightly (15-20 keywords max per group)

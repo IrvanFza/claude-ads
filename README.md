@@ -4,7 +4,7 @@
 
 # Claude Ads
 
-Comprehensive paid advertising audit and optimization skill for Claude Code. Covers Google Ads, Meta Ads, YouTube Ads, LinkedIn Ads, TikTok Ads, and Microsoft Ads with 190 audit checks, industry-specific templates, and parallel subagent delegation.
+Comprehensive paid advertising audit and optimization skill for Claude Code. Covers Google Ads, Meta Ads, YouTube Ads, LinkedIn Ads, TikTok Ads, Microsoft Ads, and Apple Search Ads with 190+ audit checks, industry-specific templates, and parallel subagent delegation.
 
 [![Claude Code Skill](https://img.shields.io/badge/Claude%20Code-Skill-blue)](https://claude.ai/claude-code)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -81,6 +81,7 @@ claude
 | `/ads creative` | Cross-platform creative quality audit and fatigue detection |
 | `/ads landing` | Landing page quality assessment for ad campaigns |
 | `/ads budget` | Budget allocation and bidding strategy review |
+| `/ads apple` | Apple Search Ads (ASA) deep analysis (campaign structure, bids, MMP, TAP) |
 | `/ads plan <type>` | Strategic ad plan with industry templates |
 | `/ads competitor` | Competitor ad intelligence across all platforms |
 
@@ -117,7 +118,7 @@ Industry-specific templates with platform mix, campaign architecture, creative s
 
 ## Features
 
-### 190 Audit Checks
+### 190+ Audit Checks
 Comprehensive coverage across all platforms with weighted severity scoring:
 
 | Platform | Checks | Key Areas |
@@ -127,6 +128,7 @@ Comprehensive coverage across all platforms with weighted severity scoring:
 | LinkedIn Ads | 25 | B2B targeting, TLA, Lead Gen forms |
 | TikTok Ads | 25 | Creative-first, Smart+, TikTok Shop |
 | Microsoft Ads | 20 | Google import, Copilot, MSAN |
+| Apple Search Ads | 35 | Campaign structure, bids, Creative Sets, MMP, TAP placements |
 
 ### Ads Health Score (0-100)
 Weighted scoring algorithm with severity multipliers:
@@ -158,9 +160,9 @@ Hard rules enforced during every audit:
 ```
 ~/.claude/skills/ads/              # Main orchestrator
 ~/.claude/skills/ads/references/   # 12 RAG reference files
-~/.claude/skills/ads-*/            # 12 sub-skills
+~/.claude/skills/ads-*/            # 13 sub-skills
 ~/.claude/skills/ads-plan/assets/  # 11 industry templates
-~/.claude/agents/audit-*.md         # 6 parallel audit agents
+~/.claude/agents/audit-*.md        # 6 parallel audit agents
 ```
 
 ### How It Works
@@ -170,6 +172,37 @@ Hard rules enforced during every audit:
 3. **Agents** run in parallel during full audits for maximum speed
 4. **References** load on-demand (RAG pattern) — only what's needed per analysis
 5. **Templates** provide industry-specific strategy frameworks
+
+## How It Analyzes Your Ads
+
+**Claude Ads works with data you provide** — exports, screenshots, or pasted metrics from your ad platform dashboards. It does not connect to any ad platform API automatically.
+
+**To get accurate, account-specific recommendations:**
+1. Export your account data (last 30 days recommended)
+2. Run the relevant command: `/ads google`, `/ads audit`, etc.
+3. Claude will ask for your industry and budget context first — provide these for relevant benchmarks
+4. Paste or share your data when prompted
+
+### Live Data Integration (Optional)
+
+For direct API access without manual exports, install the [Google Ads MCP](https://github.com/googleads/google-ads-mcp) alongside Claude Ads. This MCP server connects Claude directly to your Google Ads account via the API.
+
+## FAQ
+
+**Can Claude Ads log into my ad manager automatically?**
+No. Claude Ads analyzes data you provide (exports, screenshots, or pasted metrics). It doesn't connect to ad platforms automatically. See the Live Data Integration section above for Google Ads API access via MCP.
+
+**Does it use real account data or generic benchmarks?**
+Benchmarks are based on industry research (WordStream, Triple Whale, etc.) covering 16,000+ campaigns. They're averages — your results will vary by industry, budget level, and account maturity. Always provide your industry and monthly spend when running audits for the most relevant comparisons.
+
+**Is ad posting or campaign creation still manual?**
+Yes. Claude Ads is an audit and strategy tool. It finds issues, recommends fixes, and builds campaign plans — but creating, editing, or posting ads remains manual in your ad platform.
+
+**Why do some recommendations seem off for my account size?**
+Benchmarks and best practices differ significantly between a $500/month account and a $50k/month account. Always tell Claude your budget upfront: *"I spend $2k/month on Google Ads for a local plumbing business"* gives much better results than running `/ads google` without context.
+
+**Does it support [platform] ads?**
+Currently supported: Google, Meta (Facebook/Instagram), YouTube, LinkedIn, TikTok, Microsoft/Bing, and Apple Search Ads. Pinterest and other platforms are on the roadmap.
 
 ## Requirements
 

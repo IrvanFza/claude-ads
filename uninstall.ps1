@@ -10,7 +10,7 @@
 $ErrorActionPreference = "Stop"
 
 function Main {
-    Write-Host "→ Uninstalling Claude Ads..."
+    Write-Host "Uninstalling Claude Ads..."
 
     $ClaudeDir = Join-Path $env:USERPROFILE ".claude"
 
@@ -24,7 +24,7 @@ function Main {
     $SubSkills = @(
         "ads-audit", "ads-google", "ads-meta", "ads-youtube",
         "ads-linkedin", "ads-tiktok", "ads-microsoft", "ads-creative",
-        "ads-landing", "ads-budget", "ads-plan", "ads-competitor"
+        "ads-landing", "ads-budget", "ads-plan", "ads-competitor", "ads-apple"
     )
     foreach ($skill in $SubSkills) {
         $SkillPath = Join-Path $ClaudeDir "skills\$skill"
@@ -45,7 +45,7 @@ function Main {
         }
     }
 
-    Write-Host "✓ Claude Ads uninstalled." -ForegroundColor Green
+    Write-Host "[OK] Claude Ads uninstalled." -ForegroundColor Green
 }
 
 Main

@@ -36,7 +36,10 @@ function Main {
     Write-Host "Downloading Claude Ads..."
 
     try {
-        git clone --depth 1 $RepoUrl "$TempDir\claude-ads" 2>$null
+        # Temporarily allow stderr (git writes progress to stderr — treated as error in PS 5.1)
+        $ErrorActionPreference = "Continue"
+        git clone --depth 1 $RepoUrl "$TempDir\claude-ads" 2>&1 | Out-Null
+        $ErrorActionPreference = "Stop"
         if ($LASTEXITCODE -ne 0) { throw "Git clone failed" }
 
         # Copy main skill + references
@@ -79,7 +82,7 @@ function Main {
         Write-Host ""
         Write-Host "  Installed:"
         Write-Host "    - 1 main skill (ads orchestrator)"
-        Write-Host "    - 12 sub-skills (platform + functional)"
+        Write-Host "    - 13 sub-skills (platform + functional)"
         Write-Host "    - 6 parallel audit agents"
         Write-Host "    - 12 reference files"
         Write-Host "    - 11 industry templates"

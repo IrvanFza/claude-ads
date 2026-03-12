@@ -11,13 +11,8 @@ description: >
   advertising", "Google Ads", "Meta Ads", "Facebook Ads", "LinkedIn Ads",
   "TikTok Ads", "Microsoft Ads", "Bing Ads", "ad audit", "campaign audit",
   "ROAS", "conversion tracking", "creative fatigue", "bid strategy".
-argument-hint: "audit | google | meta | youtube | linkedin | tiktok | microsoft | creative | landing | budget | plan <type> | competitor"
-allowed-tools:
-  - Read
-  - Grep
-  - Glob
-  - Bash
-  - WebFetch
+argument-hint: "audit | google | meta | youtube | linkedin | tiktok | microsoft | apple | creative | landing | budget | plan <type> | competitor"
+license: MIT
 ---
 
 # Ads — Multi-Platform Paid Advertising Audit & Optimization
@@ -41,19 +36,43 @@ LinkedIn, TikTok, Microsoft). Orchestrates 12 specialized sub-skills and
 | `/ads landing` | Landing page quality assessment for ad campaigns |
 | `/ads budget` | Budget allocation and bidding strategy review |
 | `/ads plan <business-type>` | Strategic ad plan with industry templates |
+| `/ads apple` | Apple Search Ads (ASA) deep analysis |
 | `/ads competitor` | Competitor ad intelligence analysis |
+
+## Context Intake (Required — Always Do This First)
+
+Before any audit or analysis, collect this context. Without it, benchmarks will
+be generic and recommendations may be wrong for the user's situation.
+
+Ask these questions upfront (combine into one message):
+
+1. **Industry / Business type** — Which best describes you?
+   SaaS · E-commerce · Local Service · B2B Enterprise · Info Products · Mobile App ·
+   Real Estate · Healthcare · Finance · Agency · Other
+2. **Monthly ad spend** — Total budget and per-platform breakdown (approximate is fine)
+3. **Primary goal** — Sales / Revenue · Leads / Demos · App Installs · Calls · Brand
+4. **Active platforms** — Which platforms are you advertising on?
+
+If the user provides data upfront (e.g. "audit my Google Ads, I spend $5k/mo on SaaS"),
+extract context from that and proceed without re-asking.
+
+Use the provided context to:
+- Select the correct industry benchmarks from `references/benchmarks.md`
+- Apply budget-appropriate recommendations (e.g. Smart Bidding requires 15+ conv/month)
+- Calibrate severity scoring (a $500/mo account has different priorities than $50k/mo)
 
 ## Orchestration Logic
 
 When the user invokes `/ads audit`, delegate to subagents in parallel:
-1. Collect account data (exports, screenshots, or API access details)
-2. Detect business type and identify active platforms
-3. Spawn subagents: audit-google, audit-meta, audit-creative, audit-tracking, audit-budget, audit-compliance
-4. Collect results and generate unified report with Ads Health Score (0-100)
-5. Create prioritized action plan with Quick Wins
+1. **Collect context** (see Context Intake above — do this first)
+2. Collect account data (exports, screenshots, or pasted metrics)
+3. Detect business type and identify active platforms
+4. Spawn subagents: audit-google, audit-meta, audit-creative, audit-tracking, audit-budget, audit-compliance
+5. Collect results and generate unified report with Ads Health Score (0-100)
+6. Create prioritized action plan with Quick Wins
 
 For individual commands (`/ads google`, `/ads meta`, etc.), load the relevant
-sub-skill directly.
+sub-skill directly. Still collect context first if not already provided.
 
 ## Industry Detection
 
@@ -145,6 +164,7 @@ This skill orchestrates 12 specialized sub-skills:
 10. **ads-budget** — Budget allocation and bidding strategy
 11. **ads-plan** — Strategic ad planning with industry templates
 12. **ads-competitor** — Competitor ad intelligence
+13. **ads-apple** — Apple Search Ads (ASA) deep analysis
 
 ## Subagents
 
