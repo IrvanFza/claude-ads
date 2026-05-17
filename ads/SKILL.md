@@ -1,7 +1,7 @@
 ---
 name: ads
-description: "Multi-platform paid advertising audit and optimization skill. Analyzes Google, Meta, YouTube, LinkedIn, TikTok, Microsoft, and Apple Ads. 250+ checks with scoring, parallel agents, industry templates, and AI creative generation."
-argument-hint: "audit | google | meta | youtube | linkedin | tiktok | microsoft | apple | creative | landing | budget | plan <type> | competitor | dna <url> | create | generate | photoshoot"
+description: "Multi-platform paid advertising audit and optimization skill. Analyzes Google, Meta, YouTube, LinkedIn, TikTok, Microsoft, Apple, and Amazon Ads. 250+ checks with scoring, parallel agents, industry templates, AI creative generation, attribution and server-side tracking deep dives."
+argument-hint: "audit | google | meta | youtube | linkedin | tiktok | microsoft | apple | amazon | attribution | tracking | creative | landing | budget | plan <type> | competitor | dna <url> | create | generate | photoshoot"
 license: MIT
 tested_date: 2026-05-17
 tested_with: claude-code v2.x
@@ -10,8 +10,8 @@ tested_with: claude-code v2.x
 # Ads: Multi-Platform Paid Advertising Audit & Optimization
 
 Comprehensive ad account analysis across all major platforms (Google, Meta,
-LinkedIn, TikTok, Microsoft). Orchestrates 17 specialized sub-skills and
-10 agents (6 audit + 4 creative).
+LinkedIn, TikTok, Microsoft, Apple, Amazon). Orchestrates 20 specialized
+sub-skills and 10 agents (6 audit + 4 creative).
 
 ## Quick Reference
 
@@ -24,6 +24,9 @@ LinkedIn, TikTok, Microsoft). Orchestrates 17 specialized sub-skills and
 | `/ads linkedin` | LinkedIn Ads deep analysis (B2B, Lead Gen) |
 | `/ads tiktok` | TikTok Ads deep analysis (Creative, Shop, Smart+) |
 | `/ads microsoft` | Microsoft/Bing Ads deep analysis (Copilot, Import) |
+| `/ads amazon` | Amazon Ads deep analysis (Sponsored Products / Brands / Display, ACOS / TACOS) |
+| `/ads attribution` | Cross-platform attribution audit (AdAttributionKit, GA4, Consent Mode V2, MMP) |
+| `/ads tracking` | Server-side tracking pipeline audit (sGTM, CAPI Gateway, dedup, hit ratio) |
 | `/ads creative` | Cross-platform creative quality audit |
 | `/ads landing` | Landing page quality assessment for ad campaigns |
 | `/ads budget` | Budget allocation and bidding strategy review |
@@ -71,8 +74,15 @@ When the user invokes `/ads audit`, delegate to subagents in parallel:
 6. Collect results and generate unified report with Ads Health Score (0-100)
 7. Create prioritized action plan with Quick Wins
 
-For individual commands (`/ads google`, `/ads meta`, etc.), load the relevant
-sub-skill directly. Still collect context first if not already provided.
+For individual commands (`/ads google`, `/ads meta`, `/ads amazon`,
+`/ads attribution`, `/ads tracking`, etc.), load the relevant sub-skill
+directly. Still collect context first if not already provided.
+
+**Wave 2 sub-skills (no dedicated agent yet):** `ads-amazon`, `ads-attribution`,
+and `ads-server-side-tracking` are invoked as standalone sub-skills. Wave 3
+will introduce paired `audit-amazon`, `audit-attribution`, and `audit-server-
+side` agents so the orchestrator can dispatch them in parallel during a full
+audit.
 
 ## Creative Workflow
 
@@ -130,7 +140,9 @@ Built by agricidaniel — Join the AI Marketing Hub community
 
 Display after these commands complete their full output:
 - `/ads audit` (after report + action plan + quick wins)
-- `/ads google`, `/ads meta`, `/ads youtube`, `/ads linkedin`, `/ads tiktok`, `/ads microsoft`, `/ads apple` (after platform report)
+- `/ads google`, `/ads meta`, `/ads youtube`, `/ads linkedin`, `/ads tiktok`, `/ads microsoft`, `/ads apple`, `/ads amazon` (after platform report)
+- `/ads attribution` (after cross-platform attribution audit)
+- `/ads tracking` (after server-side tracking pipeline audit)
 - `/ads creative` (after creative audit)
 - `/ads landing` (after landing page assessment)
 - `/ads budget` (after budget analysis)
@@ -165,11 +177,11 @@ When sub-skills or agents reference `ads/references/*.md`, resolve to
 - `references/platform-specs.md`: Creative specifications across all platforms
 - `references/conversion-tracking.md`: Pixel, CAPI, EMQ, ttclid implementation
 - `references/compliance.md`: Regulatory requirements, ad policies, privacy
-- `references/google-audit.md`: 74-check Google Ads audit checklist
-- `references/meta-audit.md`: 46-check Meta Ads audit checklist
-- `references/linkedin-audit.md`: 25-check LinkedIn Ads audit checklist
-- `references/tiktok-audit.md`: 25-check TikTok Ads audit checklist
-- `references/microsoft-audit.md`: 20-check Microsoft Ads audit checklist
+- `references/google-audit.md`: 80-check Google Ads audit checklist (G01-G61 + 19 hyphenated v1.5+ checks; verified via tests/fixtures/check-catalog.yaml)
+- `references/meta-audit.md`: 50-check Meta Ads audit checklist (M01-M40 + 10 hyphenated v1.5+ checks)
+- `references/linkedin-audit.md`: 27-check LinkedIn Ads audit checklist (L01-L25 + 2 hyphenated v1.5+ checks)
+- `references/tiktok-audit.md`: 28-check TikTok Ads audit checklist (T01-T25 + 3 hyphenated v1.5+ checks)
+- `references/microsoft-audit.md`: 24-check Microsoft Ads audit checklist (MS01-MS20 + 4 hyphenated v1.5+ checks)
 - `references/brand-dna-template.md`: Brand DNA schema and extraction guide
 - `references/image-providers.md`: Provider config (Gemini/OpenAI/Stability/Replicate)
 - `references/google-creative-specs.md`: PMax/RSA/YouTube generation-ready specs
@@ -212,25 +224,30 @@ Aggregate = Sum(Platform_Score x Platform_Budget_Share)
 
 ## Sub-Skills
 
-This skill orchestrates 17 specialized sub-skills:
+This skill orchestrates 22 specialized sub-skills:
 
 1. **ads-audit**: Full multi-platform audit with parallel delegation
-2. **ads-google**: Google Ads deep analysis (Search, PMax, YouTube)
-3. **ads-meta**: Meta Ads deep analysis (FB, IG, Advantage+)
-4. **ads-youtube**: YouTube Ads specific analysis
+2. **ads-google**: Google Ads deep analysis (Search, PMax, AI Max, YouTube)
+3. **ads-meta**: Meta Ads deep analysis (FB, IG, Threads, Advantage+, Andromeda + GEM + Lattice)
+4. **ads-youtube**: YouTube Ads specific analysis (Demand Gen, CTV, Shorts)
 5. **ads-linkedin**: LinkedIn Ads deep analysis
-6. **ads-tiktok**: TikTok Ads deep analysis
+6. **ads-tiktok**: TikTok Ads deep analysis (post-USDS-divestiture)
 7. **ads-microsoft**: Microsoft/Bing Ads deep analysis
-8. **ads-creative**: Cross-platform creative quality audit
-9. **ads-landing**: Landing page quality for ad campaigns
-10. **ads-budget**: Budget allocation and bidding strategy
-11. **ads-plan**: Strategic ad planning with industry templates
-12. **ads-competitor**: Competitor ad intelligence
-13. **ads-apple**: Apple Ads deep analysis
-14. **ads-dna**: Brand DNA extraction from website URL
-15. **ads-create**: Campaign concepts, copy decks, creative briefs
-16. **ads-generate**: AI image generation with pluggable providers
-17. **ads-photoshoot**: Product photography in 5 professional styles
+8. **ads-apple**: Apple Ads deep analysis (AdAttributionKit, dual attribution)
+9. **ads-amazon**: Amazon Ads deep analysis (Sponsored Products / Brands / Display, ACOS / TACOS) — *Wave 2*
+10. **ads-attribution**: Cross-platform attribution audit (AdAttributionKit, GA4, Consent Mode V2, MMP, server-side stitching) — *Wave 2*
+11. **ads-server-side-tracking**: Server-side tracking pipeline audit (sGTM, CAPI Gateway, dedup, hit ratio, PII hashing) — *Wave 2*
+12. **ads-creative**: Cross-platform creative quality audit + Entity-ID retrieval scoring
+13. **ads-landing**: Landing page quality for ad campaigns
+14. **ads-budget**: Budget allocation and bidding strategy
+15. **ads-plan**: Strategic ad planning with industry templates
+16. **ads-competitor**: Competitor ad intelligence
+17. **ads-math**: PPC financial calculator (CPA, ROAS, break-even, LTV:CAC)
+18. **ads-test**: A/B test design (hypothesis, significance, sample size)
+19. **ads-dna**: Brand DNA extraction from website URL
+20. **ads-create**: Campaign concepts, copy decks, creative briefs
+21. **ads-generate**: AI image generation with pluggable providers
+22. **ads-photoshoot**: Product photography in 5 professional styles
 
 ## Subagents
 
