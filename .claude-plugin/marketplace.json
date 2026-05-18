@@ -1,5 +1,5 @@
 {
-  "name": "agricidaniel-claude-ads",
+  "name": "ai-marketing-hub-claude-ads",
   "owner": {
     "name": "AgriciDaniel"
   },
@@ -17,7 +17,7 @@
         "name": "AgriciDaniel"
       },
       "homepage": "https://agricidaniel.com/blog/claude-code-ad-agency",
-      "repository": "https://github.com/AgriciDaniel/claude-ads",
+      "repository": "https://github.com/AI-Marketing-Hub/claude-ads",
       "license": "MIT",
       "category": "marketing",
       "tags": [

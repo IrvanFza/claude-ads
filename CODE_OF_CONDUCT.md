@@ -48,7 +48,7 @@ Instances of abusive, harassing, or otherwise unacceptable behavior may be repor
 to the project maintainer at:
 
 - **GitHub**: [@AgriciDaniel](https://github.com/AgriciDaniel)
-- **Private report**: [GitHub Security Advisory](https://github.com/AgriciDaniel/claude-ads/security/advisories/new)
+- **Private report**: [GitHub Security Advisory](https://github.com/AI-Marketing-Hub/claude-ads/security/advisories/new)
 
 All complaints will be reviewed and investigated promptly and fairly.
 

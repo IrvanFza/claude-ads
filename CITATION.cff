@@ -15,8 +15,8 @@ abstract: >
 authors:
   - alias: AgriciDaniel
     name-particle: ""
-repository-code: "https://github.com/AgriciDaniel/claude-ads"
-url: "https://github.com/AgriciDaniel/claude-ads"
+repository-code: "https://github.com/AI-Marketing-Hub/claude-ads"
+url: "https://github.com/AI-Marketing-Hub/claude-ads"
 license: MIT
 version: "1.7.0"
 date-released: "2026-05-17"

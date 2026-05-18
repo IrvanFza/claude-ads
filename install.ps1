@@ -126,7 +126,7 @@ function Main {
     }
 
     $SkillDirResolved = Join-Path $SkillBase "ads"
-    $RepoUrl = "https://github.com/AgriciDaniel/claude-ads"
+    $RepoUrl = "https://github.com/AI-Marketing-Hub/claude-ads"
 
     Write-Host "=================================="
     Write-Host "   Claude Ads - Installer"

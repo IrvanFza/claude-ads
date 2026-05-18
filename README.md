@@ -8,8 +8,8 @@ Comprehensive paid advertising audit and optimization skill conforming to the [A
 
 [![Agent Skill](https://img.shields.io/badge/Agent%20Skills-Compatible-blue)](https://agentskills.io)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/github/v/release/AgriciDaniel/claude-ads)](https://github.com/AgriciDaniel/claude-ads/releases)
-[![CI](https://img.shields.io/github/actions/workflow/status/AgriciDaniel/claude-ads/ci.yml?branch=main&label=CI)](https://github.com/AgriciDaniel/claude-ads/actions)
+[![Version](https://img.shields.io/github/v/release/AI-Marketing-Hub/claude-ads)](https://github.com/AI-Marketing-Hub/claude-ads/releases)
+[![CI](https://img.shields.io/github/actions/workflow/status/AI-Marketing-Hub/claude-ads/ci.yml?branch=main&label=CI)](https://github.com/AI-Marketing-Hub/claude-ads/actions)
 
 **Host support:**
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-Verified-brightgreen)](https://claude.ai/claude-code)
@@ -39,13 +39,21 @@ Comprehensive paid advertising audit and optimization skill conforming to the [A
 
 ## Installation
 
+> ⚠ **Private repository.** This repo lives in the `AI-Marketing-Hub` GitHub
+> org and is currently private. The remote install commands below
+> (`/plugin marketplace add`, `curl | bash`, `irm | iex`) require an
+> authenticated session with access to the org. Members of AI Marketing Hub
+> Pro can authenticate via `gh auth login` or a GitHub PAT. For everyone
+> else, use the **Manual Install** path with `git clone` after being added
+> as a collaborator.
+
 ### Plugin Install (Claude Code — Recommended)
 
 Add the marketplace and install in Claude Code:
 
 ```shell
-/plugin marketplace add AgriciDaniel/claude-ads
-/plugin install claude-ads@agricidaniel-claude-ads
+/plugin marketplace add AI-Marketing-Hub/claude-ads
+/plugin install claude-ads@ai-marketing-hub-claude-ads
 ```
 
 This registers claude-ads as a native plugin with auto-updates, namespace isolation, and proper version tracking.
@@ -53,13 +61,13 @@ This registers claude-ads as a native plugin with auto-updates, namespace isolat
 ### One-Command Install (Unix/macOS/Linux)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/AgriciDaniel/claude-ads/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/AI-Marketing-Hub/claude-ads/main/install.sh | bash
 ```
 
 ### One-Command Install (Windows PowerShell)
 
 ```powershell
-irm https://raw.githubusercontent.com/AgriciDaniel/claude-ads/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/AI-Marketing-Hub/claude-ads/main/install.ps1 | iex
 ```
 
 ### Cross-Host Install (Codex CLI / Cursor / Windsurf / Gemini CLI / Goose)
@@ -108,7 +116,7 @@ Targets and override paths are strictly whitelist-validated (no shell injection,
 ### Manual Install
 
 ```bash
-git clone https://github.com/AgriciDaniel/claude-ads.git
+git clone https://github.com/AI-Marketing-Hub/claude-ads.git
 cd claude-ads
 ./install.sh                # Unix/macOS/Linux, default target=claude
 ./install.sh --target=codex # any cross-host target
@@ -164,21 +172,28 @@ claude
 | Command | Description |
 |---------|-------------|
 | `/ads audit` | Full multi-platform audit with parallel subagent delegation |
-| `/ads google` | Google Ads deep analysis (Search, PMax, Display, YouTube, Demand Gen) |
-| `/ads meta` | Meta Ads deep analysis (FB, IG, Advantage+ Shopping) |
-| `/ads youtube` | YouTube Ads specific analysis (Skippable, Shorts, Demand Gen) |
-| `/ads linkedin` | LinkedIn Ads deep analysis (B2B, Lead Gen, TLA) |
-| `/ads tiktok` | TikTok Ads deep analysis (Creative, Shop, Smart+) |
+| `/ads google` | Google Ads deep analysis (Search, PMax, AI Max, Display, YouTube, Demand Gen) |
+| `/ads meta` | Meta Ads deep analysis (FB, IG, Threads, Advantage+, Andromeda + GEM + Lattice) |
+| `/ads youtube` | YouTube Ads specific analysis (Skippable, Shorts, Demand Gen, CTV) |
+| `/ads linkedin` | LinkedIn Ads deep analysis (B2B, Lead Gen, TLA, ABM) |
+| `/ads tiktok` | TikTok Ads deep analysis (Creative, Shop, Smart+, post-USDS) |
 | `/ads microsoft` | Microsoft/Bing Ads deep analysis (Copilot, Import validation) |
+| `/ads apple` | Apple Ads deep analysis (CPPs, Maximize Conversions, AdAttributionKit, TAP) |
+| `/ads amazon` | Amazon Ads deep analysis (Sponsored Products / Brands / Display, ACOS / TACOS) — *Wave 2* |
+| `/ads attribution` | Cross-platform attribution audit (AdAttributionKit, GA4, Consent Mode V2, MMP) — *Wave 2* |
+| `/ads tracking` | Server-side tracking pipeline audit (sGTM, CAPI Gateway, dedup, hashing) — *Wave 2* |
 | `/ads creative` | Cross-platform creative quality audit and fatigue detection |
 | `/ads landing` | Landing page quality assessment for ad campaigns |
 | `/ads budget` | Budget allocation and bidding strategy review |
-| `/ads apple` | Apple Ads deep analysis (campaign structure, bids, CPPs, Maximize Conversions, TAP) |
 | `/ads plan <type>` | Strategic ad plan with industry templates |
 | `/ads competitor` | Competitor ad intelligence across all platforms |
 | `/ads math` | PPC financial calculator (CPA, ROAS, break-even, budget forecasting, LTV:CAC) |
 | `/ads test` | A/B test design (hypothesis framework, significance, sample size, duration) |
 | `/ads report` | Generate PDF audit report for client deliverables |
+| `/ads dna <url>` | Extract brand DNA from website → `brand-profile.json` |
+| `/ads create` | Generate campaign concepts + copy briefs → `campaign-brief.md` |
+| `/ads generate` | Generate AI ad images from brief → `ad-assets/` |
+| `/ads photoshoot` | Product photography in 5 styles (Studio, Floating, Ingredient, In Use, Lifestyle) |
 
 ### `/ads audit`
 **Full Multi-Platform Audit**
@@ -186,12 +201,14 @@ claude
 Spawns 6 parallel subagents to analyze your ad accounts simultaneously:
 - **audit-google**: 80 checks across Search, PMax, AI Max, Demand Gen, CTV, YouTube
 - **audit-meta**: 50 checks across Pixel/CAPI, Andromeda creative diversity, Structure, Audience
-- **audit-creative**: 21+ cross-platform creative quality checks with Andromeda and Symphony awareness
-- **audit-tracking**: 8+ conversion tracking and privacy infrastructure checks (Consent Mode V2, CAPI, Events API, AdAttributionKit)
-- **audit-budget**: 24 budget and bidding strategy checks
-- **audit-compliance**: 18+ compliance checks (ECPC deprecated, VAC deprecated, EU messaging, Apple rebrand)
+- **audit-creative**: cross-platform creative quality with Andromeda Entity-ID and Symphony awareness
+- **audit-tracking**: conversion tracking + privacy infrastructure (Consent Mode V2, CAPI, Events API, AdAttributionKit)
+- **audit-budget**: budget and bidding strategy across LinkedIn, TikTok, Microsoft
+- **audit-compliance**: compliance, settings, performance benchmarks across all platforms
 
 Generates a unified **Ads Health Score (0-100)** with prioritized action plan.
+
+> **Wave 2 standalone sub-skills.** `/ads audit` parallel-delegates the 6 agents above. Amazon Ads, cross-platform attribution, and server-side tracking are covered by their standalone sub-skills (`/ads amazon`, `/ads attribution`, `/ads tracking`) — invoke them directly. Wave 3 will add their paired audit agents so they can dispatch in parallel during the full audit.
 
 <p align="center">
   <img src="assets/diagrams/02-parallel-audit.svg" alt="Parallel Audit Pipeline" width="100%">
@@ -316,7 +333,10 @@ AI-powered creative generation with 4 specialized agents:
 </p>
 
 ### Reference Data
-25 built-in reference files with 2026-current benchmarks, bidding decision trees, platform specifications, compliance requirements, conversion tracking guides, MCP integration guide, and additional platform coverage.
+26 built-in reference files with 2026-current benchmarks, bidding decision trees, platform specifications, compliance requirements, conversion tracking guides, MCP integration guide, and additional platform coverage.
+
+### 10-Principle Thinking Framework
+Every command operates under a shared thinking discipline — **OBSERVE × 2 / LISTEN / THINK / CONNECT × 2 / FEEL / ACCEPT / CREATE / GROW** — defined in [`ads/references/thinking-framework.md`](ads/references/thinking-framework.md). The framework maps each principle to concrete ad-work behavior + anti-pattern + workflow trigger. It is what separates a number-crunching report from a strategic deliverable. Load before any audit, plan, or creative output.
 
 ### Data Handling & Privacy
 Claude Ads runs entirely on your local machine via Claude Code. No ad account data is sent to external servers. When using MCP servers for live API access, data flows directly between your machine and the ad platform APIs. All analysis happens locally.
@@ -401,13 +421,13 @@ Currently supported: Google, Meta (Facebook/Instagram), YouTube, LinkedIn, TikTo
 ### Unix/macOS/Linux
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/AgriciDaniel/claude-ads/main/uninstall.sh | bash
+curl -fsSL https://raw.githubusercontent.com/AI-Marketing-Hub/claude-ads/main/uninstall.sh | bash
 ```
 
 ### Windows PowerShell
 
 ```powershell
-irm https://raw.githubusercontent.com/AgriciDaniel/claude-ads/main/uninstall.ps1 | iex
+irm https://raw.githubusercontent.com/AI-Marketing-Hub/claude-ads/main/uninstall.ps1 | iex
 ```
 
 ## Related Projects

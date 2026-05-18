@@ -4,7 +4,7 @@ Thanks for your interest in contributing! Here's how to get involved.
 
 ## Reporting Bugs
 
-Open a [GitHub Issue](https://github.com/AgriciDaniel/claude-ads/issues) with:
+Open a [GitHub Issue](https://github.com/AI-Marketing-Hub/claude-ads/issues) with:
 
 - Your OS and Python version
 - The full error output (copy from terminal)
@@ -13,7 +13,7 @@ Open a [GitHub Issue](https://github.com/AgriciDaniel/claude-ads/issues) with:
 
 ## Suggesting Features
 
-Use [GitHub Discussions](https://github.com/AgriciDaniel/claude-ads/discussions) for feature ideas and questions.
+Use [GitHub Discussions](https://github.com/AI-Marketing-Hub/claude-ads/discussions) for feature ideas and questions.
 
 ## Pull Requests
 
@@ -88,12 +88,12 @@ Until the Wave 2 eval harness lands, regression testing is manual:
 
 ## Reporting Bugs
 
-Open a [GitHub Issue](https://github.com/AgriciDaniel/claude-ads/issues) using the bug-report template. Include OS + Python version, the full error output, the command that failed, and the platform context.
+Open a [GitHub Issue](https://github.com/AI-Marketing-Hub/claude-ads/issues) using the bug-report template. Include OS + Python version, the full error output, the command that failed, and the platform context.
 
 ## Suggesting Features
 
-Use [GitHub Discussions](https://github.com/AgriciDaniel/claude-ads/discussions) for feature ideas. For larger proposals (new platforms, new sub-skills), open a feature-request issue first to align on scope.
+Use [GitHub Discussions](https://github.com/AI-Marketing-Hub/claude-ads/discussions) for feature ideas. For larger proposals (new platforms, new sub-skills), open a feature-request issue first to align on scope.
 
 ## Security
 
-For security issues, **do not open a public issue**. Use the [private GitHub Security Advisory channel](https://github.com/AgriciDaniel/claude-ads/security/advisories/new). See `SECURITY.md`.
+For security issues, **do not open a public issue**. Use the [private GitHub Security Advisory channel](https://github.com/AI-Marketing-Hub/claude-ads/security/advisories/new). See `SECURITY.md`.

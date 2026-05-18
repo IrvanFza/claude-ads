@@ -69,9 +69,9 @@ Swaps versus the v1.6.0 list: dropped `linkedin-ads`, `tiktok-ads`, `ppc`,
 > sanitization, SHA-pinned CI, dependabot patch-only auto-merge, install
 > matrix with strict input whitelisting.
 >
-> Install: `/plugin marketplace add AgriciDaniel/claude-ads`
+> Install: `/plugin marketplace add AI-Marketing-Hub/claude-ads`
 >
-> Repo: https://github.com/AgriciDaniel/claude-ads
+> Repo: https://github.com/AI-Marketing-Hub/claude-ads
 > Demo: https://agricidaniel.com/blog/claude-code-ad-agency
 
 **Category:** Marketing & SEO
@@ -87,7 +87,7 @@ Submit a PR adding claude-ads under an appropriate section.
 **Suggested entry (paste into the README list, sorted alphabetically):**
 
 ```markdown
-- [claude-ads](https://github.com/AgriciDaniel/claude-ads) — Comprehensive paid-advertising audit skill covering Google, Meta, YouTube, LinkedIn, TikTok, Microsoft & Apple Ads with 250+ weighted checks, parallel audit agents, industry templates, and PDF report generation. MIT licensed.
+- [claude-ads](https://github.com/AI-Marketing-Hub/claude-ads) — Comprehensive paid-advertising audit skill covering Google, Meta, YouTube, LinkedIn, TikTok, Microsoft & Apple Ads with 250+ weighted checks, parallel audit agents, industry templates, and PDF report generation. MIT licensed.
 ```
 
 **Section to place under:** Marketing / Advertising / Business (depending on
@@ -98,7 +98,7 @@ the repo's current taxonomy).
 **PR body:**
 
 ```
-Adds [claude-ads](https://github.com/AgriciDaniel/claude-ads) to the list — a
+Adds [claude-ads](https://github.com/AI-Marketing-Hub/claude-ads) to the list — a
 production-grade paid-advertising audit and optimization skill for Claude Code.
 
 Brief: 7 platforms covered, 250+ checks, 19 sub-skills, 10 parallel agents,
@@ -125,7 +125,7 @@ under "I want to feature this skill" or whatever the current taxonomy is.
 
 ```
 **Skill:** claude-ads
-**Repo:** https://github.com/AgriciDaniel/claude-ads
+**Repo:** https://github.com/AI-Marketing-Hub/claude-ads
 **Category:** Marketing / Paid Advertising
 **License:** MIT
 **Maintainer:** @AgriciDaniel
