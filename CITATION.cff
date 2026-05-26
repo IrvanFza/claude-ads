@@ -20,8 +20,8 @@ authors:
 repository-code: "https://github.com/AI-Marketing-Hub/claude-ads"
 url: "https://github.com/AI-Marketing-Hub/claude-ads"
 license: MIT
-version: "1.8.0"
-date-released: "2026-05-26"
+version: "1.8.1"
+date-released: "2026-05-27"
 keywords:
   - paid advertising
   - google ads

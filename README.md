@@ -21,7 +21,7 @@ A manual audit of a single Google Ads account takes 4-6 hours of senior PPC time
 [![Gemini CLI](https://img.shields.io/badge/Gemini%20CLI-Experimental-yellow)](https://github.com/google-gemini/gemini-cli)
 [![Goose](https://img.shields.io/badge/Goose-Experimental-yellow)](https://block.github.io/goose/)
 
-> **Last updated:** 2026-05-26 · **Version:** v1.8.0 · [CHANGELOG](CHANGELOG.md) · [Blog: full ad audit breakdown](https://agricidaniel.com/blog/claude-code-ad-agency)
+> **Last updated:** 2026-05-27 · **Version:** v1.8.1 · [CHANGELOG](CHANGELOG.md) · [Blog: full ad audit breakdown](https://agricidaniel.com/blog/claude-code-ad-agency)
 
 > **Two versions of this skill.**
 > - 🌐 **Public open-source** → [`AgriciDaniel/claude-ads`](https://github.com/AgriciDaniel/claude-ads): MIT, public releases, no membership. Best if you want stable + downloadable.

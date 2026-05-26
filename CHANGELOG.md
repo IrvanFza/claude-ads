@@ -5,6 +5,21 @@ All notable changes to claude-ads are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.1] - 2026-05-27
+
+Documentation and metadata patch on top of v1.8.0. No code, check-catalog, or
+behavior changes; 59/59 pytest still green. (Caught by a post-ship review.)
+
+### Fixed
+
+* **README "What's new" section** updated from v1.7.0 (Wave 2) to v1.8.0 (Wave 3): the +91 checks (catalog 300), the new `audit-regulatory-compliance` agent, and the agentic-era reference docs. It had been left headlining the prior release.
+* **Stale test count corrected: 41 to 59** (actual pytest collected and passing) in README, `CITATION.cff`, `plugin.json`, and `marketplace.json`. The v1.7.0 CHANGELOG entry retains 41 (accurate for that release).
+* **Roadmap framing** refreshed: v1.8.0 is shipped / current, not "in active development"; removed the inaccurate "v1.8.0 visual system" diagram alt-text.
+
+### Added
+
+* **Limitations section** in the README (manual data input, catalog scope, point-in-time 2026 benchmarks, experimental non-Claude hosts) with a table-of-contents entry.
+
 ## [1.8.0] - 2026-05-26
 
 Substantive Wave 3 release. Adds 91 net-new catalog-tracked platform checks across the five

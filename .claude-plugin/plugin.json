@@ -1,6 +1,6 @@
 {
   "name": "claude-ads",
-  "version": "1.8.0",
+  "version": "1.8.1",
   "description": "Multi-host paid advertising audit & optimization skill conforming to the Agent Skills open standard. Verified on Claude Code; experimental on Codex CLI, Cursor, Windsurf, Gemini CLI, Goose. 300+ checks across Google, Meta, YouTube, LinkedIn, TikTok, Microsoft, Apple & Amazon Ads with weighted scoring, parallel agents, a regulatory-compliance agent (EU AI Act + 22-state US privacy), 12 industry templates, AI creative generation, PPC math, A/B test design, PDF reports, attribution + server-side tracking deep dives, and a 59-test pytest eval harness.",
   "author": {
     "name": "AgriciDaniel",
