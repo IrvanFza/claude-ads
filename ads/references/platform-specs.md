@@ -1,276 +1,73 @@
-# Platform Creative Specifications
+# Creative Specification Resolution
 
-<!-- Updated: 2026-04-13 | v1.5 -->
-<!-- Sources: Google Research PDF 3, Claude Research, 2026 Platform Research -->
+**Verified:** 2026-07-11
+**Refresh due:** 2026-08-10
+**Evidence status:** source index and validation workflow, not a universal spec sheet
 
-## Google Ads
+Creative requirements vary by format, placement, objective, geography, account
+eligibility, and product release. Resolve the exact format before validating an
+asset. A single “platform spec” table is unsafe because it silently merges
+requirements that do not apply to the same placement.
 
-### Responsive Search Ads (RSA)
-| Component | Min | Max | Char Limit |
-|-----------|-----|-----|------------|
-| Headlines | 3 | 15 | 30 chars each |
-| Descriptions | 2 | 4 | 90 chars each |
-| Display Paths | N/A | 2 | 15 chars each |
-| Final URL | 1 | 1 | Required |
+## Resolution order
 
-Best practice: 8-10 headlines, 2-3 descriptions (Claude), 12-15 for Excellent (Google).
+1. Capture platform, objective, format, placement, destination, geography, and
+   the current account UI selection.
+2. Open the matching platform-specific creative reference.
+3. Verify volatile limits against the current official help page or API schema.
+4. Prefer the stricter requirement when an asset must serve across placements.
+5. Preview in the account UI and validate the rendered crop, overlays, text,
+   captions, audio, CTA, disclosure, and destination.
+6. Record source ID, retrieval date, observed UI/API version, and exceptions.
 
-**Pinning Rules:**
-- Pin 1 headline to Position 1 (brand/main keyword)
-- Pin 1 headline to Position 2 (secondary angle)
-- Each pinned position: provide 2-3 variants
-- Leave Position 3 unpinned
-- Never pin all positions (kills Ad Strength)
+If sources disagree, do not guess. Label the check `unknown`, preserve both
+values, and request a current preview or API validation.
 
-**Dynamic Insertion:**
-```
-{KeyWord:Default Text}              # Keyword insertion
-{COUNTDOWN(YYYY/MM/DD HH:MM:SS)}   # Countdown timer
-{LOCATION(City)}                    # Location insertion
-{CUSTOMIZER.attribute:default}      # Ad customizer
-```
+## Current source entry points
 
-### Performance Max Asset Groups
-| Asset Type | Spec | Max Per Group |
-|-----------|------|---------------|
-| Marketing Image | 1200×628 (1.91:1) | 20 total |
-| Square Image | 1200×1200 (1:1) | (in 20) |
-| Portrait Image | 960×1200 (4:5) | (in 20) |
-| Logo (landscape) | 1200×300 (4:1) | 5 total |
-| Logo (square) | 1200×1200 (1:1) | (in 5) |
-| Video (landscape) | 1920×1080 (16:9) | 5 total |
-| Video (square) | 1080×1080 (1:1) | (in 5) |
-| Video (vertical) | 1080×1920 (9:16) | 5 vertical |
-| Headlines | 30 chars | 5 |
-| Long Headlines | 90 chars | 5 |
-| Descriptions | 90 chars | 5 |
-| Short Description | 60 chars | 1 |
-| Business Name | 25 chars | 1 |
+| Platform | First-party source | Scope |
+| --- | --- | --- |
+| Google / YouTube | `google-rsa-official` — [Responsive search ads](https://support.google.com/google-ads/answer/7684791) and [Google Ads asset requirements](https://support.google.com/adspolicy/answer/6368661) | Search text and general asset policy |
+| Meta | `meta-video-ads-official` — [Meta video ads](https://www.facebook.com/business/ads/video-ad-format) | Video placements and link to Ads Guide |
+| LinkedIn | `linkedin-ads-guide-official` — [LinkedIn Ads Guide](https://business.linkedin.com/marketing-solutions/success/ads-guide) | Current format entry points |
+| TikTok | `tiktok-ad-format-policy-official` — [Ad format and functionality](https://ads.tiktok.com/help/article/tiktok-ads-policy-ad-format-and-functionality) | Creative and editorial requirements |
+| Microsoft | `microsoft-ad-types-official` — [Ad types](https://help.ads.microsoft.com/apex/index/3/en-us/50879) | Current ad-type behavior |
+| Apple | `apple-ads-creative-official` — [Apple Ads creative help](https://ads.apple.com/app-store/help/ad-creative) | Apple Ads creative entry point |
+| Amazon | `amazon-creative-acceptance-official` — [Creative acceptance policies](https://advertising.amazon.com/resources/ad-policy/creative-acceptance) | Amazon Ads creative policy |
+| Reddit | `reddit-ads-help-official` — [Reddit Ads Help](https://business.reddithelp.com/s/) | Current Reddit help and policy discovery |
+| Pinterest | `pinterest-ad-specs-official` — [Pinterest ad specs](https://help.pinterest.com/en/business/article/pinterest-product-specs) | Pinterest formats and assets |
+| Snapchat | `snap-creative-specs-official` — [Snap creative specifications](https://forbusiness.snapchat.com/advertising/ad-formats) | Snap ad-format entry point |
+| X | `x-creative-specs-official` — [X Ads creative specs](https://business.x.com/en/help/campaign-setup/creative-ad-specifications) | X formats and assets |
 
-**Image:** Min 128×128, max 5120×5120, max 5MB, JPG/PNG
-**Video:** Min 10s, rec 60s, min 480p, rec 1080p+, MP4/MOV, max 256MB
+These pages are discovery points, not proof that every format is available in a
+given account. Re-check the active UI/API before emitting a pass or a mutation.
 
-### YouTube Ad Formats
-| Format | Ratio | Resolution | Duration | Skip |
-|--------|-------|-----------|----------|------|
-| Skippable In-Stream | 16:9 | 1920×1080 | 12s-3min (rec 15-30s) | After 5s |
-| Non-Skippable | 16:9 | 1920×1080 | 15-60s (expanded 2025) | No |
-| Bumper | 16:9 | 1920×1080 | ≤6s | No |
-| In-Feed | 16:9 | 1920×1080 | Any | N/A |
-| YouTube Shorts | 9:16 | 1080×1920 | ≤60s | Swipe |
+## Precisely retained facts
 
-**YouTube Shorts Safe Zone:** Center 1080×1420px. Bottom 480px = UI overlay.
-**Shorts CTA timing:** CTA button appears at **3 seconds** for PMax/App/Demand Gen campaigns, **10 seconds** for Video View/Reach campaigns. Music/voiceover increases conversions by 20%+.
+Google's current responsive-search-ad documentation says an RSA can accept up to
+15 headlines and four descriptions, and headline fields support up to 30
+characters. Microsoft's current ad-type page also says its RSA accepts up to 15
+headlines and four descriptions. These facts apply only to those named formats;
+they do not establish a cross-platform text standard.
 
-### Google Extensions / Assets
-| Type | Char Limit | Max Count | Notes |
-|------|-----------|-----------|-------|
-| Sitelink | 25 text, 35 desc ×2 | 20 | Min 4 rec; +3.5% conv with 6 |
-| Callout | 25 chars | 20 | Min 4 rec |
-| Structured Snippet | 25 chars | 2 sets | Predefined headers |
-| Image | 1:1 or 1.91:1 | 20 | Min 1MB |
-| Call | Phone number | 1 | With call tracking |
-| Lead Form | 30 headline, 200 desc | 1 | Privacy URL required |
-| Price | 25 header, 25 desc | 8 items | Min 3 |
-| Promotion | 20 item | 1 | Schedulable |
+## Validation output
 
-### Ad Strength Scoring
-- Headline uniqueness (Levenshtein distance)
-- Keyword inclusion in headlines
-- 3-7 headlines = Poor/Average, 8-10 = Good, 11-15 = Excellent
-- "Excellent" → ~12-15% more conversions (diagnostic, not direct factor)
+For each asset return:
 
----
+- `platform`, `format`, `placement`, `objective`, and `geography`.
+- Observed dimensions, duration, file type, file size, text fields, audio,
+  captions, destination, CTA, and disclosure.
+- `pass`, `fail`, `unknown`, or `not_applicable` for each applicable requirement.
+- Official source ID and retrieval date for every precise limit.
+- Preview evidence and any crop or overlay risk.
+- Remediation that preserves the creative concept.
 
-## Meta Ads
+## Non-universal rules
 
-### Image Specs
-| Placement | Ratio | Size | Max |
-|-----------|-------|------|-----|
-| Feed (preferred) | 4:5 | 1080×1350 | 30MB |
-| Feed (supported) | 1:1 | 1080×1080 | 30MB |
-| Stories/Reels | 9:16 | 1080×1920 | 30MB |
-| Right Column | 1:1 | 1080×1080 | 30MB |
-| Min width: 600px (1080px rec). No hard 20% text rule but AI penalizes heavy text.
-
-### Video Specs
-| Placement | Ratio | Resolution | Max Duration | Max Size |
-|-----------|-------|-----------|-------------|----------|
-| Feed | 4:5 (pref) | 1080×1350 | 241 min | 4GB |
-| Feed | 1:1 | 1080×1080 | 241 min | 4GB |
-| Stories | 9:16 | 1080×1920 | 120s | 4GB |
-| Reels | 9:16 | 1080×1920 | 90s (rec 15-30s) | 4GB |
-| In-Stream | 16:9 | 1920×1080 | 15 min | 4GB |
-
-**Reels Safe Zone:** Center 1080×1300px. Bottom 35% (~670px) = CTA, caption, reactions.
-
-### Text Limits
-| Component | Recommended | Max |
-|-----------|------------|-----|
-| Primary Text | 125 chars | 2200 |
-| Headline | 27-40 chars | N/A |
-| Description | 20 chars (carousel) | N/A |
-| Reels Primary | 72 chars | N/A |
-
-### Carousel
-- 2-10 cards, all 1:1 (1080×1080)
-- Per card: Headline 40 chars, Description 20 chars
-- Unique URL per card supported
-
-### Advantage+ Creative Enhancements
-Auto-adjustments when enabled: brightness/contrast, art filters, aspect ratio crops, music addition, text variations, video from static images. Test via A/B split.
-
-### Quality Rankings
-Three signals: Quality Ranking, Engagement Rate Ranking, Conversion Rate Ranking.
-Rated: Above Average / Average / Below Average (10th, 35th, 55th percentile).
-
----
-
-## TikTok Ads
-
-### Video Specs
-| Type | Min Resolution | Duration | Max Size | Min Bitrate |
-|------|---------------|----------|----------|-------------|
-| In-Feed (Non-Spark) | 540×960 (9:16) | 5-60s | 500MB | 516kbps |
-| Spark Ads | Organic specs | Organic | N/A | N/A |
-| TopView | 720×1280 (9:16) | 5-60s | 500MB | 2500kbps |
-| Brand Takeover | 720×1280 | 3-5s | 2MB img / 500MB vid | N/A |
-
-Recommended: 1080×1920, MP4/MOV, H.264, audio required, captions required.
-
-### TikTok Safe Zone
-```
-Top:    0-150px   → Status bar, account info
-Right:  0-140px   → Like, comment, share, profile
-Bottom: 0-450px   → Caption, music, CTA, nav bar
-
-SAFE BOX: X:40-940px, Y:150-1470px (900×1320px)
-```
-All critical text, logos, CTAs MUST be within safe box.
-**Video Shopping Ads (VSA):** Increase bottom clearance to **450px** for product card overlay. Safe box becomes X:40-940px, Y:150-1320px.
-
-### Smart+ Specs
-- Up to 30 ad groups per campaign
-- Up to 50 creatives per asset group
-- Symphony AI auto-generates variations
-
----
-
-## LinkedIn Ads
-
-### Single Image
-| Component | Spec |
-|-----------|------|
-| Image (landscape) | 1200×627 (1.91:1) |
-| Image (square) | 1080×1080 (1:1): better engagement |
-| Max file | 5MB, PNG/JPG |
-| Intro text | 150 chars rec / 600 max |
-| Headline | 70 chars rec / 200 max |
-| Description | 100 chars (desktop only) |
-| CTA Button | Predefined list |
-
-### Video
-| Component | Spec |
-|-----------|------|
-| Format | MP4 required |
-| Size | 75KB - 500MB |
-| Duration | 3s - 30min (rec 15-30s) |
-| Resolution | 360p min (720p+ rec) |
-| Aspect Ratios | 16:9 (landscape), 1:1 (square), 9:16 (mobile only) |
-
-### Document Ads
-- PDF, DOC, DOCX, PPT, PPTX
-- 100MB max, 300 pages max (10-20 rec)
-
-### Messaging
-| Type | Component | Limit |
-|------|-----------|-------|
-| Message Ad | Subject | 60 chars |
-| Message Ad | Body | 1,500 chars |
-| Message Ad | CTA | 20 chars |
-| Conversation Ad | Intro | 500 chars |
-| Conversation Ad | CTA buttons | 5 max, 25 chars each |
-
-### Audience Requirements
-- Minimum: 500 members for delivery
-- Recommended: 50,000-300,000
-- Predictive Audiences seed: 300+ members
-- Company list upload: up to 300,000
-
----
-
-## Microsoft Ads
-
-### RSA (mirrors Google)
-| Component | Limit |
-|-----------|-------|
-| Headlines | 3-15, 30 chars each |
-| Descriptions | 2-4, 90 chars each |
-| Display Paths | 2, 15 chars each |
-
-### Multimedia Ads (unique)
-| Component | Spec |
-|-----------|------|
-| Image | 1200×628 (1.91:1) |
-| Short Headline | 30 chars |
-| Long Headline | 90 chars |
-| Description | 90 chars |
-| Business Name | 25 chars |
-
-### Video Ads (v1.5, April 2025+)
-| Format | Ratio | Resolution | Duration | Notes |
-|--------|-------|-----------|----------|-------|
-| Vertical Video | 9:16 | 1080×1920 | Up to 90s | Added April 2025 |
-| Horizontal Video | 16:9 | 1920×1080 | Up to 90s | Standard |
-| Square Video | 1:1 | 1080×1080 | Up to 90s | Audience Network |
-| CTV Non-Skippable | 16:9 | 1920×1080 | 30s | Netflix, Max, Hulu, Roku, discovery+ |
-
-**Copilot Image Animation (Nov 2025 pilot):** Converts static images to video assets automatically.
-
-### Microsoft-Unique Extensions
-| Extension | Description |
-|-----------|-------------|
-| Action Extension | Predefined action buttons |
-| Filter Link Extension | Category-based deep links |
-| Review Extension | Third-party review quotes |
-
----
-
-## Cross-Platform Standards
-
-### Universal Safe Zone (Vertical Video)
-For content running across TikTok + Reels + Shorts + Stories:
-```
-Safe intersection: 900×1000px center
-X: 40-940px (900px wide)
-Y: 450-1450px (1000px tall)
-```
-
-### Character Normalization
-| Component | Safe Limit | Strictest Platform |
-|-----------|-----------|-------------------|
-| Short headline | 30 chars | Google/Microsoft RSA |
-| Long headline | 70 chars | LinkedIn recommended |
-| Primary description | 90 chars | Google/Microsoft RSA |
-| Short description | 25 chars | Extension callouts |
-
-### Video Encoding Standard
-| Component | Recommended |
-|-----------|-------------|
-| Video codec | H.264 High Profile |
-| Audio codec | AAC |
-| Audio level | -14 LUFS |
-| Container | MP4 |
-| Frame rate | 30fps |
-| Color space | Rec. 709 |
-| Bitrate (1080p) | 8-12 Mbps |
-
-### Aspect Ratio Master Chart
-| Ratio | Dimensions | Used By |
-|-------|-----------|---------|
-| 16:9 | 1920×1080 | YouTube, Google Display, LinkedIn Landscape |
-| 9:16 | 1080×1920 | TikTok, Reels, Shorts, Stories |
-| 4:5 | 1080×1350 | Meta Feed (preferred) |
-| 1:1 | 1080×1080 | Meta Feed, LinkedIn, Carousel |
-| 1.91:1 | 1200×628 | Google PMax, LinkedIn Single Image |
-| 4:1 | 1200×300 | Google Logo (landscape) |
+- There is no universal vertical-video safe zone. Validate against the current
+  placement preview and platform overlay guidance.
+- Recommended sizes are not always minimum acceptance requirements; label them.
+- A platform upload success is not proof of policy approval or good rendering.
+- Character counts may use platform-specific normalization; validate through the
+  platform API/UI when exact acceptance matters.
+- Do not turn “best practice” asset counts or durations into compliance failures.

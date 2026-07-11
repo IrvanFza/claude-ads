@@ -1,74 +1,71 @@
-# Automation Tier Classifier — Reference
+# Automation Delegation Classifier
 
-<!-- Created: 2026-05-26 | v1.8.0 -->
-**Scope:** how to classify the *degree* of automation an account has handed to each platform's
-AI layer, so the audit can recommend the right level of human oversight. New in v1.8.0 because
-2026 platforms expose **module-level** automation control (you can no longer treat a campaign
-as simply "automated" or "manual").
+**Verified:** 2026-07-11
+**Refresh:** foundational review by 2027-01-07; platform modules at run time
+**Scope:** oversight and mutation risk, not an account-health score
 
-This file is loaded on-demand by `/ads audit`, `/ads budget`, `/ads meta`, `/ads tiktok`,
-`/ads microsoft`, and `/ads google`.
+Classify what authority has been delegated, not whether a campaign carries an
+“automated” product label. One campaign can delegate bidding while keeping
+budget, targeting, creative, and approvals under human control.
 
----
+## Delegation dimensions
 
-## Why a classifier
+Observe each dimension separately:
 
-Through 2025, "automation" was binary per campaign (e.g., Advantage+ Shopping on/off). In 2026
-the major platforms expose automation as independently toggleable modules:
+- Goal and conversion selection.
+- Bidding and bid targets.
+- Budget allocation and pacing.
+- Audience or query expansion and exclusions.
+- Placement selection.
+- Creative generation, variation, and destination selection.
+- Campaign creation and structural changes.
+- Monitoring, pausing, and incident containment.
+- External agent/MCP read and write authority.
 
-- **TikTok Smart+ One Buying Experience** — targeting, budget, and placements can each be on or
-  off independently; the Smart+ label appears per module.
-- **Meta Advantage+** — Advantage+ Audience, Placements, Creative, and campaign budget are
-  separate switches.
-- **Google AI Max for Search** — keywordless matching, Final URL Expansion, and text
-  customization are separate controls layered onto a Search campaign.
-- **Microsoft AI Max for Search** — query expansion with brand/term guardrails as separate
-  controls.
-- **LinkedIn Accelerate** — full auto-campaign creation vs manual.
-
-An audit that flags "you're not using automation" or "you've fully automated" misreads the
-account. The classifier resolves the actual per-module state.
-
----
+Use the current account UI/API and capability manifest. Do not infer a module's
+state from the campaign name.
 
 ## Tiers
 
-| Tier | Name | Definition | Recommended oversight |
-|------|------|------------|----------------------|
-| T0 | Manual | No platform AI delegation; manual bids, targeting, placements | Standard |
-| T1 | Assisted | One module delegated (e.g., Smart Bidding only) with human structure | Light review |
-| T2 | Module-mixed | Some modules automated, others manual (e.g., Smart+ budget auto, targeting manual) | Per-module review; verify the *manual* modules are intentional, not neglected |
-| T3 | Platform-managed | Most modules delegated (Advantage+ / Smart+ all-on / AI Max full) with humans setting goals + creative + guardrails | Goal + guardrail review; confirm creative volume + clean signals feed the AI |
-| T4 | Agentic | An external agent (MCP) plans/launches/optimizes campaigns | **Mandatory** write-action governance (see `mcp-integration.md` C-MCP-1..6); read-only-first, human approval gate, paused-by-default |
+| Tier | Definition | Required oversight |
+| --- | --- | --- |
+| T0 Observed manual | No decision module is delegated; tools may report only | Standard QA and change control |
+| T1 Assisted | Automation recommends or drafts, but a human selects and applies | Review evidence, applicability, and final diff |
+| T2 Bounded delegation | One or more modules act within explicit account-defined limits | Per-module goals, ceilings, monitoring, and rollback |
+| T3 Broad platform delegation | The platform controls most delivery modules while humans own goals, assets, and guardrails | Signal quality, objective, creative, exclusion, and marginal-outcome review |
+| T4 External agent write | An external agent can create or change account objects | Full mutation gate, least privilege, idempotency, independent verification, and incident response |
 
----
+The account tier is the highest active authority, but retain the dimension map;
+the summary tier alone is not decision-complete.
 
-## Per-platform module map
+## Classification method
 
-| Platform | Modules to classify | Notes |
-|----------|--------------------|-------|
-| Meta | Advantage+ Audience · Placements · Creative · Campaign Budget · MCP connection | ARM/GEM/Lattice reward T3 with broad targeting + 15-20 creative angles |
-| Google | Smart Bidding · AI Max keywordless · Final URL Expansion · text customization · PMax | DSA → AI Max forced migration Sept 2026 pushes accounts toward T3 |
-| TikTok | Smart+ targeting · budget · placements (each independent) · GMV Max | Recognize module-level granularity, not all-or-nothing |
-| Microsoft | AI Max for Search query expansion · automated bidding · Brand Agents | Guardrails (brand/term exclusions) required at T3 |
-| LinkedIn | Accelerate auto-campaign · Auto-targeting · Draft with AI | SMB-focused; verify targeting precision not lost |
+1. Inventory active campaigns and connected integrations.
+2. Capture each dimension's observed state, owner, limits, and evidence timestamp.
+3. Separate recommendation, draft, apply, and autonomous-apply authority.
+4. Identify conflicting controllers, such as platform pacing plus an external
+   budget agent.
+5. Assign confidence and list unknown or unavailable states.
+6. Reclassify after material configuration or connector changes.
 
----
+## Review by tier
 
-## Audit usage
+- T0: verify manual operations are intentional and monitored; manual is not
+  automatically safer or healthier.
+- T1: check recommendation quality and reviewer accountability.
+- T2: test ceilings, edge cases, alerting, and recovery for each delegated module.
+- T3: inspect business-goal alignment, conversion quality, marginal performance,
+  creative/destination controls, exclusions, and platform eligibility.
+- T4: apply `mcp-integration.md`; no write without exact capability verification,
+  approval, audit, remote verification, and rollback.
 
-1. Determine each account's tier per platform from the module states above.
-2. At **T2**, verify every manual module is a deliberate choice (a manual module inside an
-   otherwise-automated campaign is often neglect, not strategy).
-3. At **T3**, the audit's job shifts from "tune the levers" to "feed the AI well":
-   creative volume + diversity, broad targeting, clean conversion signals (Pixel + CAPI,
-   EMQ ≥ 7), and correct goal/guardrail configuration.
-4. At **T4 (agentic)**, escalate to the `audit-regulatory-compliance` MCP governance checks
-   (C-MCP-1..6). A T4 account without a human approval gate is a P0 account-loss risk
-   (SurfaceLabs precedent, April 2026).
+## Findings
 
-## Cross-references
+Automation adoption and novelty are unscored context. Score only a stable control
+such as missing approval, absent ceiling, conflicting automation, unauthorized
+scope, broken monitoring, or no rollback when applicable.
 
-- `mcp-integration.md` — write-action governance for T4 (agentic) accounts
-- `meta-ai-stack.md` — why T3 Meta accounts must feed the four-layer AI stack with creative diversity
-- `scoring-system.md` — regulatory-exposure band picks up T4 governance gaps
+Return platform, campaign/object IDs, dimension, observed authority, tier,
+evidence, confidence, risk, owner, and remediation. Do not prescribe “more
+automation” or “more manual control” without a diagnosed account problem and a
+testable expected result.
