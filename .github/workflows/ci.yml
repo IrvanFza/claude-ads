@@ -184,6 +184,7 @@ jobs:
           ./uninstall.ps1 -Target claude -SkillDir "$probe/skills" -AgentDir "$probe/agents"
           if (Test-Path "$probe/skills/ads/managed-runtime-receipt.json") { throw "receipt survived uninstall" }
           if (Test-Path "$probe/skills/ads/.venv") { throw "managed environment survived uninstall" }
+          exit 0
 
   package-smoke:
     name: Reproducible package smoke test
