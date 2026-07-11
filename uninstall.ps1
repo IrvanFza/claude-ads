@@ -87,7 +87,10 @@ function Main {
     foreach ($OwnedDir in @($Manifest.directories) | Sort-Object Length -Descending) {
         $FullPath = Assert-OwnedPath $OwnedDir
         if (Test-Path $FullPath) {
-            Remove-Item -LiteralPath $FullPath -ErrorAction SilentlyContinue
+            $Children = @(Get-ChildItem -LiteralPath $FullPath -Force -ErrorAction SilentlyContinue)
+            if ($Children.Count -eq 0) {
+                Remove-Item -LiteralPath $FullPath -Force -Confirm:$false
+            }
         }
     }
 

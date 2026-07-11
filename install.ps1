@@ -289,6 +289,12 @@ function Main {
                 Copy-Item $_.FullName -Destination $Destination -Force
                 [void]$OwnedFiles.Add($Destination)
             }
+            Get-ChildItem $CoreSource -Directory -Recurse | Where-Object {
+                $_.FullName -notmatch "[\\/]__pycache__(?:[\\/]|$)"
+            } | ForEach-Object {
+                $Relative = [System.IO.Path]::GetRelativePath($CoreSource, $_.FullName)
+                [void]$OwnedDirs.Add((Join-Path $CoreDir $Relative))
+            }
             [void]$OwnedDirs.Add($CoreDir)
             [void]$OwnedDirs.Add($ScriptsDir)
         }

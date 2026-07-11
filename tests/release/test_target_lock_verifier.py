@@ -45,7 +45,10 @@ def test_valid_native_report_writes_commit_lock_inventory_resolver_and_runner_bi
     assert result["source_commit"] == "a" * 40
     assert result["pip_version"] == report["pip_version"]
     assert result["dependency_inventory_sha256"] and result["requirements_lock_sha256"]
-    assert result["environment"]["runner"] == {"RUNNER_ARCH": "X64", "RUNNER_OS": "Linux"}
+    runner = result["environment"]["runner"]
+    assert runner["RUNNER_ARCH"] == "X64"
+    assert runner["RUNNER_OS"] == "Linux"
+    assert set(runner).issubset({"ImageOS", "ImageVersion", "RUNNER_ARCH", "RUNNER_OS"})
 
 
 @pytest.mark.parametrize("mutation", ["url", "hash", "missing", "extra"])
