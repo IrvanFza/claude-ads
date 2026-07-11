@@ -32,6 +32,30 @@ PLATFORM_SOURCES = {
     },
 }
 
+NEW_PLATFORM_FOUNDATION_SOURCES = {
+    "CLM-0012": ("youtube-google-ads-video-official", "developers.google.com"),
+    "CLM-0013": ("apple-ads-api-official", "developer.apple.com"),
+    "CLM-0014": ("amazon-ads-api-official", "advertising.amazon.com"),
+    "CLM-0015": ("reddit-business-help", "business.reddithelp.com"),
+    "CLM-0016": ("pinterest-conversions-api", "help.pinterest.com"),
+    "CLM-0017": ("snap-marketing-api", "developers.snap.com"),
+    "CLM-0018": ("x-conversion-tracking", "business.x.com"),
+}
+
+ALLOWED_DISCOVERY_ONLY_SOURCES = {
+    "public-claude-ads-issues",
+    "public-claude-ads-pulls",
+    "meta-video-ads-official",
+    "linkedin-ads-guide-official",
+    "tiktok-ad-format-policy-official",
+    "apple-ads-creative-official",
+    "amazon-creative-acceptance-official",
+    "reddit-ads-help-official",
+    "pinterest-ad-specs-official",
+    "snap-creative-specs-official",
+    "x-creative-specs-official",
+}
+
 UNSCORED_DISCOVERY_IDS = {
     "google": {"G-AI1", *{f"G{i}" for i in range(81, 96)}},
     "meta": {"M-AN1", "M-IA1", "M-TH1", *{f"M{i}" for i in range(51, 73)}},
@@ -201,9 +225,33 @@ def test_platform_runtime_sources_use_https_official_hosts(repo_root):
 def test_platform_grounding_claims_are_load_bearing_and_fresh(repo_root):
     claim_doc = _manifest(repo_root, "claim-ledger.json")
     claims = {item["id"]: item for item in claim_doc["claims"]}
-    for claim_id in ("CLM-0007", "CLM-0008", "CLM-0009", "CLM-0010", "CLM-0011"):
+    for claim_id in (
+        "CLM-0007", "CLM-0008", "CLM-0009", "CLM-0010", "CLM-0011",
+        *NEW_PLATFORM_FOUNDATION_SOURCES,
+    ):
         claim = claims[claim_id]
         assert claim["load_bearing"] is True
         assert claim["verdict"] == "verified"
         assert claim["last_verified"] == "2026-07-11"
         assert claim["refresh_due"] == "2026-08-10"
+
+
+def test_new_platform_foundation_claims_use_registered_official_sources(repo_root):
+    source_doc = _manifest(repo_root, "source-ledger.json")
+    claim_doc = _manifest(repo_root, "claim-ledger.json")
+    sources = {item["id"]: item for item in source_doc["sources"]}
+    claims = {item["id"]: item for item in claim_doc["claims"]}
+    for claim_id, (source_id, hostname) in NEW_PLATFORM_FOUNDATION_SOURCES.items():
+        assert claims[claim_id]["source_ids"] == [source_id]
+        assert sources[source_id]["claim_ids"] == [claim_id]
+        parsed = urlparse(sources[source_id]["locator"])
+        assert parsed.scheme == "https"
+        assert parsed.hostname == hostname
+        assert sources[source_id]["authority_tier"] == 1
+        assert sources[source_id]["redistribution"] == "metadata-only"
+
+
+def test_unclaimed_sources_are_an_explicit_discovery_only_allowlist(repo_root):
+    source_doc = _manifest(repo_root, "source-ledger.json")
+    unclaimed = {source["id"] for source in source_doc["sources"] if not source["claim_ids"]}
+    assert unclaimed == ALLOWED_DISCOVERY_ONLY_SOURCES

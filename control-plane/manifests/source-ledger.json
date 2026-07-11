@@ -199,7 +199,7 @@
       "confidence": "high",
       "license": "Google Developers content CC BY 4.0 and samples Apache-2.0 unless noted",
       "redistribution": "metadata-only",
-      "claim_ids": []
+      "claim_ids": ["CLM-0012"]
     },
     {
       "id": "microsoft-uet-official",
@@ -290,7 +290,7 @@
       "confidence": "high",
       "license": "Apple Developer documentation terms; citation only",
       "redistribution": "metadata-only",
-      "claim_ids": []
+      "claim_ids": ["CLM-0013"]
     },
     {
       "id": "amazon-ads-api-official",
@@ -303,7 +303,7 @@
       "confidence": "high",
       "license": "Amazon Ads site and API terms; citation only",
       "redistribution": "metadata-only",
-      "claim_ids": []
+      "claim_ids": ["CLM-0014"]
     },
     {
       "id": "reddit-business-help",
@@ -316,7 +316,7 @@
       "confidence": "high",
       "license": "Reddit documentation terms; citation only",
       "redistribution": "metadata-only",
-      "claim_ids": [],
+      "claim_ids": ["CLM-0015"],
       "notes": "The Reddit audit reference links the related catalogs and dynamic product ads pages."
     },
     {
@@ -330,7 +330,7 @@
       "confidence": "high",
       "license": "Pinterest documentation terms; citation only",
       "redistribution": "metadata-only",
-      "claim_ids": [],
+      "claim_ids": ["CLM-0016"],
       "notes": "The Pinterest audit reference links the related catalogs, Performance+, and collections pages."
     },
     {
@@ -344,7 +344,7 @@
       "confidence": "high",
       "license": "Snap documentation terms; citation only",
       "redistribution": "metadata-only",
-      "claim_ids": [],
+      "claim_ids": ["CLM-0017"],
       "notes": "The Snapchat audit reference links Ads API, measurement, and Pixel documentation."
     },
     {
@@ -358,7 +358,7 @@
       "confidence": "high",
       "license": "X documentation terms; citation only",
       "redistribution": "metadata-only",
-      "claim_ids": [],
+      "claim_ids": ["CLM-0018"],
       "notes": "The X audit reference links the related measurement and Ads business pages."
     },
     {
