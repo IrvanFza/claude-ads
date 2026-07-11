@@ -296,44 +296,85 @@ main() {
     fi
     echo "✓ Distribution source: ${SOURCE_MODE}"
 
-    mkdir -p "${SKILL_DIR}/references" "${AGENT_DIR}"
+    mkdir -p "${SKILL_BASE}" "${AGENT_DIR}"
+    SKILL_BASE_CANON=$(CDPATH= cd -- "$SKILL_BASE" && pwd -P)
+    AGENT_DIR_CANON=$(CDPATH= cd -- "$AGENT_DIR" && pwd -P)
     MANIFEST_TMP=$(mktemp "${SKILL_BASE}/.claude-ads-manifest.XXXXXX")
     printf 'V\t1\nT\t%s\n' "$TARGET" > "$MANIFEST_TMP"
 
     record_file() { printf 'F\t%s\n' "$1" >> "$MANIFEST_TMP"; }
     record_dir() { printf 'D\t%s\n' "$1" >> "$MANIFEST_TMP"; }
-    install_file() {
-        local source="$1" destination="$2"
-        mkdir -p "$(dirname -- "$destination")"
-        cp "$source" "$destination"
-        record_file "$destination"
+    canonical_destination() {
+        local destination="$1" parent base canonical_parent
+        parent=$(dirname -- "$destination")
+        base=$(basename -- "$destination")
+        canonical_parent=$(CDPATH= cd -- "$parent" 2>/dev/null && pwd -P) || return 1
+        printf '%s/%s\n' "$canonical_parent" "$base"
     }
+    assert_owned_destination() {
+        local destination="$1"
+        case "$destination" in
+            "${SKILL_BASE_CANON}"|"${SKILL_BASE_CANON}"/*|"${AGENT_DIR_CANON}"|"${AGENT_DIR_CANON}"/*) return 0 ;;
+            *) echo "✗ Install destination escapes configured roots: ${destination}" >&2; return 1 ;;
+        esac
+    }
+    ensure_owned_dir() {
+        local directory="$1" canonical
+        [ ! -L "$directory" ] || { echo "✗ Refusing symlinked install directory: ${directory}" >&2; return 1; }
+        mkdir -p "$(dirname -- "$directory")"
+        canonical=$(canonical_destination "$directory") || return 1
+        assert_owned_destination "$canonical" || return 1
+        mkdir -p "$canonical"
+        CDPATH= cd -- "$canonical" && pwd -P
+    }
+    previously_owned_file() {
+        local destination="$1"
+        [ -f "$MANIFEST_PATH" ] || return 1
+        awk -F '\t' -v destination="$destination" \
+            '$1 == "F" && $2 == destination { found=1 } END { exit !found }' "$MANIFEST_PATH"
+    }
+    install_file() {
+        local source="$1" destination="$2" canonical
+        [ ! -L "$destination" ] || { echo "✗ Refusing symlinked install file: ${destination}" >&2; return 1; }
+        ensure_owned_dir "$(dirname -- "$destination")" >/dev/null
+        canonical=$(canonical_destination "$destination") || return 1
+        assert_owned_destination "$canonical" || return 1
+        if [ -e "$canonical" ] && ! previously_owned_file "$canonical"; then
+            echo "✗ Refusing to overwrite unowned file: ${canonical}" >&2
+            return 1
+        fi
+        cp "$source" "$canonical"
+        record_file "$canonical"
+    }
+
+    SKILL_DIR=$(ensure_owned_dir "$SKILL_DIR")
+    REFERENCES_DIR=$(ensure_owned_dir "${SKILL_DIR}/references")
 
     # Copy main skill + references
     echo "→ Installing skill files..."
     install_file "${SOURCE_DIR}/ads/SKILL.md" "${SKILL_DIR}/SKILL.md"
     for source_file in "${SOURCE_DIR}/ads/references/"*.md; do
         [ -f "$source_file" ] || continue
-        install_file "$source_file" "${SKILL_DIR}/references/$(basename -- "$source_file")"
+        install_file "$source_file" "${REFERENCES_DIR}/$(basename -- "$source_file")"
     done
-    record_dir "${SKILL_DIR}/references"
+    record_dir "$REFERENCES_DIR"
 
     # Copy sub-skills
     echo "→ Installing sub-skills..."
     for skill_dir in "${SOURCE_DIR}/skills"/*/; do
         skill_name=$(basename "${skill_dir}")
         target="${SKILL_BASE}/${skill_name}"
-        mkdir -p "${target}"
+        target=$(ensure_owned_dir "$target")
         install_file "${skill_dir}SKILL.md" "${target}/SKILL.md"
 
         # Copy assets (industry templates) if they exist
         if [ -d "${skill_dir}assets" ]; then
-            mkdir -p "${target}/assets"
+            target_assets=$(ensure_owned_dir "${target}/assets")
             for source_file in "${skill_dir}assets/"*.md; do
                 [ -f "$source_file" ] || continue
-                install_file "$source_file" "${target}/assets/$(basename -- "$source_file")"
+                install_file "$source_file" "${target_assets}/$(basename -- "$source_file")"
             done
-            record_dir "${target}/assets"
+            record_dir "$target_assets"
         fi
         record_dir "$target"
     done
@@ -349,7 +390,7 @@ main() {
     SCRIPTS_DIR="${SKILL_DIR}/scripts"
     if [ -d "${SOURCE_DIR}/scripts" ]; then
         echo "→ Installing Python scripts..."
-        mkdir -p "${SCRIPTS_DIR}"
+        SCRIPTS_DIR=$(ensure_owned_dir "$SCRIPTS_DIR")
         for source_file in "${SOURCE_DIR}/scripts/"*.py; do
             [ -f "$source_file" ] || continue
             install_file "$source_file" "${SCRIPTS_DIR}/$(basename -- "$source_file")"

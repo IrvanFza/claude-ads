@@ -36,9 +36,20 @@ validate_install_path() {
 }
 
 is_owned_path() {
-    local path="$1"
-    case "$path" in
-        "${SKILL_BASE}"/*|"${AGENT_DIR}"/*) return 0 ;;
+    local path="$1" parent base canonical_parent canonical
+    case "$path" in *$'\n'*|*$'\r'*|*$'\t'*|*/../*|*/..|../*|..|*/./*|*/.) return 1 ;; esac
+    parent=$(dirname -- "$path")
+    base=$(basename -- "$path")
+    if [ -d "$parent" ]; then
+        canonical_parent=$(CDPATH= cd -- "$parent" 2>/dev/null && pwd -P) || return 1
+        canonical="${canonical_parent}/${base}"
+    else
+        # A missing parent cannot be deleted by any manifest record. Keep the
+        # lexical check so stale, safe entries do not block uninstall.
+        canonical="$path"
+    fi
+    case "$canonical" in
+        "${SKILL_BASE_CANON}"/*|"${AGENT_DIR_CANON}"/*) return 0 ;;
         *) return 1 ;;
     esac
 }
@@ -79,6 +90,11 @@ main() {
         validate_install_path "$AGENT_DIR_OVERRIDE" || { echo "✗ Invalid --agent-dir" >&2; exit 1; }
         AGENT_DIR="$AGENT_DIR_OVERRIDE"
     fi
+
+    [ -d "$SKILL_BASE" ] || { echo "✗ Skill root not found: ${SKILL_BASE}" >&2; exit 1; }
+    [ -d "$AGENT_DIR" ] || { echo "✗ Agent root not found: ${AGENT_DIR}" >&2; exit 1; }
+    SKILL_BASE_CANON=$(CDPATH= cd -- "$SKILL_BASE" && pwd -P)
+    AGENT_DIR_CANON=$(CDPATH= cd -- "$AGENT_DIR" && pwd -P)
 
     local MANIFEST_PATH="${SKILL_BASE}/.claude-ads-${TARGET}.manifest"
     if [ ! -f "$MANIFEST_PATH" ]; then

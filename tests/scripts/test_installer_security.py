@@ -85,6 +85,43 @@ def test_tampered_manifest_fails_before_removing_files(tmp_path):
     assert (skills / "ads" / "SKILL.md").exists()
 
 
+def test_installer_refuses_symlink_escape(tmp_path):
+    skills = tmp_path / "skills"
+    agents = tmp_path / "agents"
+    outside = tmp_path / "outside"
+    skills.mkdir()
+    outside.mkdir()
+    (skills / "ads").symlink_to(outside, target_is_directory=True)
+
+    result = _run(
+        "install.sh",
+        "--target=claude",
+        "--source=local",
+        "--no-deps",
+        f"--skill-dir={skills}",
+        f"--agent-dir={agents}",
+    )
+    assert result.returncode != 0
+    assert "Refusing symlinked install directory" in result.stderr
+    assert not (outside / "SKILL.md").exists()
+
+
+def test_manifest_traversal_is_rejected_before_removal(tmp_path):
+    skills, agents = _install(tmp_path)
+    manifest = skills / ".claude-ads-claude.manifest"
+    with manifest.open("a", encoding="utf-8") as handle:
+        handle.write(f"F\t{skills / 'ads' / '..' / '..' / 'outside.txt'}\n")
+
+    result = _run(
+        "uninstall.sh",
+        "--target=claude",
+        f"--skill-dir={skills}",
+        f"--agent-dir={agents}",
+    )
+    assert result.returncode != 0
+    assert (skills / "ads" / "SKILL.md").exists()
+
+
 @pytest.mark.skipif(shutil.which("pwsh") is None, reason="PowerShell is not installed")
 @pytest.mark.parametrize("script", ["install.ps1", "uninstall.ps1"])
 def test_powershell_scripts_parse(script):
