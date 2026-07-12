@@ -26,13 +26,17 @@ See ads/references/image-providers.md for pricing and capability details.
 
 import argparse
 import base64
+from contextlib import contextmanager
 import hashlib
 import json
 import os
+import re
+import stat
 import struct
 import sys
 import tempfile
 import time
+import zlib
 from pathlib import Path
 from typing import Any, Mapping
 from urllib.parse import urlparse
@@ -74,7 +78,15 @@ RETRY_BACKOFF = [1, 2, 4, 8]  # seconds
 
 MAX_BATCH_SIZE = 50
 MAX_DIMENSION = 8192
-_ALLOWED_IMAGE_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.webp', '.gif'}
+MAX_REFERENCE_IMAGE_BYTES = 20 * 1024 * 1024
+MAX_REFERENCE_DECODED_BYTES = 128 * 1024 * 1024
+_ALLOWED_IMAGE_EXTENSIONS = {'.png'}
+_WINDOWS_RESERVED_NAMES = {
+    "con", "prn", "aux", "nul",
+    *(f"com{number}" for number in range(1, 10)),
+    *(f"lpt{number}" for number in range(1, 10)),
+    "com¹", "com²", "com³", "lpt¹", "lpt²", "lpt³",
+}
 
 _PROMPT_SUMMARY = "[redacted: raw prompt is ephemeral and is not persisted]"
 
@@ -87,10 +99,307 @@ def _prompt_record(prompt: str) -> dict[str, str]:
     }
 
 
-def _reference_image_sha256(path: str | None) -> str | None:
-    if not path:
-        return None
-    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+def _reference_input_root(input_root: str | None) -> Path:
+    """Return the explicit, canonical operator boundary for reference images."""
+    configured = input_root or os.environ.get("CLAUDE_ADS_INPUT_ROOT")
+    if not configured:
+        raise ValueError(
+            "Reference images require --input-root or CLAUDE_ADS_INPUT_ROOT"
+        )
+    candidate = Path(configured).expanduser()
+    try:
+        resolved = candidate.resolve(strict=True)
+    except OSError as exc:
+        raise ValueError("Reference-image input root does not exist") from exc
+    if not resolved.is_dir():
+        raise ValueError("Reference-image input root must be a directory")
+    return resolved
+
+
+def _resolve_reference_source(reference: Any, input_root: Path) -> Path:
+    """Resolve one untrusted batch reference beneath an explicit local root.
+
+    Batch documents are data, not authority to read arbitrary workstation files.
+    Reference paths are therefore portable relative paths, may not traverse or use
+    symlinks, and must resolve to a bounded regular image file.
+    """
+    if not isinstance(reference, str) or not reference or "\x00" in reference:
+        raise ValueError("Reference image must be a non-empty relative path")
+    if reference != reference.strip():
+        raise ValueError("Reference image path may not have surrounding whitespace")
+    value = reference
+    if (
+        Path(value).is_absolute()
+        or value.startswith(("/", "\\"))
+        or re.match(r"^[A-Za-z]:", value)
+        or "\\" in value
+    ):
+        raise ValueError("Reference image must be relative to the configured input root")
+    parts = Path(value).parts
+    if not parts or any(part in {"", ".", ".."} for part in parts):
+        raise ValueError("Reference image path traversal is forbidden")
+    if any(ord(character) < 32 or ord(character) == 127 for character in value):
+        raise ValueError("Reference image path contains a control character")
+    for part in parts:
+        if re.search(r'[<>:"|?*]', part):
+            raise ValueError("Reference image path is not portable")
+        if part.endswith((" ", ".")):
+            raise ValueError("Reference image path has a trailing space or dot")
+        if part.split(".", 1)[0].casefold() in _WINDOWS_RESERVED_NAMES:
+            raise ValueError("Reference image path uses a Windows-reserved name")
+    if Path(value).suffix.lower() not in _ALLOWED_IMAGE_EXTENSIONS:
+        raise ValueError("Unsupported reference image format")
+
+    lexical = input_root.joinpath(*parts)
+    current = input_root
+    for part in parts:
+        current = current / part
+        if current.is_symlink():
+            raise ValueError("Symlinked reference images and parent paths are forbidden")
+    try:
+        resolved = lexical.resolve(strict=True)
+        resolved.relative_to(input_root)
+    except (OSError, ValueError) as exc:
+        raise ValueError("Reference image escapes the configured input root") from exc
+    if not resolved.is_file():
+        raise ValueError("Reference image must be a regular file")
+    return resolved, parts
+
+
+def _assert_descriptor_beneath_root(
+    descriptor: int, input_root: Path, expected_path: Path
+) -> None:
+    """Bind the opened handle—not merely its pre-open pathname—to the input root."""
+    if os.name == "nt":  # pragma: no cover - exercised by the native Windows matrix
+        import ctypes
+        import msvcrt
+
+        handle = msvcrt.get_osfhandle(descriptor)
+        buffer = ctypes.create_unicode_buffer(32768)
+        get_final_path = ctypes.WinDLL("kernel32", use_last_error=True).GetFinalPathNameByHandleW
+        get_final_path.argtypes = [
+            ctypes.c_void_p,
+            ctypes.c_wchar_p,
+            ctypes.c_uint32,
+            ctypes.c_uint32,
+        ]
+        get_final_path.restype = ctypes.c_uint32
+        length = get_final_path(
+            ctypes.c_void_p(handle), buffer, len(buffer), 0
+        )
+        if not length or length >= len(buffer):
+            raise ValueError("Cannot verify the opened reference-image handle")
+        final_name = buffer.value
+        if final_name.startswith("\\\\?\\UNC\\"):
+            final_name = "\\\\" + final_name[8:]
+        elif final_name.startswith("\\\\?\\"):
+            final_name = final_name[4:]
+        final_path = Path(final_name).resolve(strict=True)
+        try:
+            final_path.relative_to(input_root)
+        except ValueError as exc:
+            raise ValueError("Opened reference image escapes the configured input root") from exc
+        return
+
+    proc_descriptor = Path(f"/proc/self/fd/{descriptor}")
+    if proc_descriptor.exists():
+        try:
+            proc_descriptor.resolve(strict=True).relative_to(input_root)
+        except (OSError, ValueError) as exc:
+            raise ValueError("Opened reference image escapes the configured input root") from exc
+        return
+
+    if sys.platform == "darwin":  # pragma: no cover - exercised by native macOS CI
+        import fcntl
+
+        try:
+            raw_path = fcntl.fcntl(descriptor, 50, b"\x00" * 1024)  # F_GETPATH
+            final_path = Path(raw_path.split(b"\x00", 1)[0].decode()).resolve(strict=True)
+            final_path.relative_to(input_root)
+        except (OSError, UnicodeDecodeError, ValueError) as exc:
+            raise ValueError("Opened reference image escapes the configured input root") from exc
+        return
+
+    raise ValueError("This platform cannot attest the opened reference-image path")
+
+
+def _open_reference_beneath(
+    input_root: Path, parts: tuple[str, ...], resolved: Path
+) -> int:
+    """Open a relative file through anchored directory descriptors when supported."""
+    nofollow = getattr(os, "O_NOFOLLOW", 0)
+    cloexec = getattr(os, "O_CLOEXEC", 0)
+    nonblock = getattr(os, "O_NONBLOCK", 0)
+    directory = getattr(os, "O_DIRECTORY", 0)
+    if os.open in os.supports_dir_fd and directory and nofollow:
+        root_descriptor = os.open(input_root, os.O_RDONLY | directory | nofollow | cloexec)
+        current_descriptor = root_descriptor
+        opened_directories: list[int] = []
+        try:
+            for part in parts[:-1]:
+                next_descriptor = os.open(
+                    part,
+                    os.O_RDONLY | directory | nofollow | cloexec,
+                    dir_fd=current_descriptor,
+                )
+                opened_directories.append(next_descriptor)
+                current_descriptor = next_descriptor
+            descriptor = os.open(
+                parts[-1],
+                os.O_RDONLY | nofollow | cloexec | nonblock,
+                dir_fd=current_descriptor,
+            )
+            try:
+                _assert_descriptor_beneath_root(descriptor, input_root, resolved)
+            except Exception:
+                os.close(descriptor)
+                raise
+            return descriptor
+        finally:
+            for opened in reversed(opened_directories):
+                os.close(opened)
+            os.close(root_descriptor)
+
+    descriptor = os.open(resolved, os.O_RDONLY | nofollow | cloexec | nonblock)
+    try:
+        _assert_descriptor_beneath_root(descriptor, input_root, resolved)
+    except Exception:
+        os.close(descriptor)
+        raise
+    return descriptor
+
+
+def _validate_reference_payload(payload: bytes, suffix: str) -> None:
+    """Validate a bounded, decodable PNG raster—not only a spoofable prefix."""
+    if suffix != ".png" or not _validate_png(payload):
+        raise ValueError("Reference image bytes do not form a valid supported PNG")
+
+
+def _validate_png(payload: bytes) -> bool:
+    if not payload.startswith(b"\x89PNG\r\n\x1a\n"):
+        return False
+    position = 8
+    seen_ihdr = seen_idat = seen_iend = False
+    idat_finished = False
+    compressed = bytearray()
+    width = height = bit_depth = color_type = interlace = 0
+    while position + 12 <= len(payload):
+        length = struct.unpack(">I", payload[position:position + 4])[0]
+        chunk_type = payload[position + 4:position + 8]
+        if not re.fullmatch(rb"[A-Za-z]{4}", chunk_type) or not chunk_type[2:3].isupper():
+            return False
+        data_start = position + 8
+        data_end = data_start + length
+        crc_end = data_end + 4
+        if crc_end > len(payload):
+            return False
+        expected_crc = struct.unpack(">I", payload[data_end:crc_end])[0]
+        if zlib.crc32(chunk_type + payload[data_start:data_end]) & 0xFFFFFFFF != expected_crc:
+            return False
+        if not seen_ihdr:
+            if chunk_type != b"IHDR" or length != 13:
+                return False
+            width, height, bit_depth, color_type, compression, filter_method, interlace = struct.unpack(
+                ">IIBBBBB", payload[data_start:data_end]
+            )
+            if not (1 <= width <= MAX_DIMENSION and 1 <= height <= MAX_DIMENSION):
+                return False
+            if (
+                bit_depth != 8
+                or color_type not in {0, 2, 4, 6}
+                or compression != 0
+                or filter_method != 0
+                or interlace != 0
+            ):
+                return False
+            seen_ihdr = True
+        elif chunk_type == b"IHDR":
+            return False
+        if chunk_type == b"PLTE":
+            return False
+        if chunk_type == b"IDAT":
+            if idat_finished:
+                return False
+            seen_idat = True
+            compressed.extend(payload[data_start:data_end])
+        elif seen_idat and chunk_type != b"IEND":
+            idat_finished = True
+        if chunk_type not in {b"IHDR", b"PLTE", b"IDAT", b"IEND"} and chunk_type[:1].isupper():
+            return False
+        if chunk_type == b"IEND":
+            if length != 0 or not seen_idat:
+                return False
+            seen_iend = True
+            position = crc_end
+            break
+        position = crc_end
+    if not (seen_ihdr and seen_idat and seen_iend and position == len(payload)):
+        return False
+
+    channels = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}[color_type]
+    bits_per_pixel = channels * bit_depth
+
+    row_size = 1 + (width * bits_per_pixel + 7) // 8
+    expected_size = height * row_size
+    row_sizes = [row_size] * height
+    if expected_size > MAX_REFERENCE_DECODED_BYTES or not compressed:
+        return False
+    try:
+        decompressor = zlib.decompressobj()
+        decoded = decompressor.decompress(bytes(compressed), expected_size + 1)
+    except zlib.error:
+        return False
+    if (
+        len(decoded) != expected_size
+        or not decompressor.eof
+        or decompressor.unused_data
+        or decompressor.unconsumed_tail
+    ):
+        return False
+    offset = 0
+    for row_size in row_sizes:
+        if offset >= len(decoded) or decoded[offset] > 4:
+            return False
+        offset += row_size
+    return offset == len(decoded)
+
+
+@contextmanager
+def _private_reference_snapshot(reference: Any, input_root: Path):
+    """Yield an immutable private snapshot of a validated reference image."""
+    if reference is None:
+        yield None, None
+        return
+    source, parts = _resolve_reference_source(reference, input_root)
+    descriptor = _open_reference_beneath(input_root, parts, source)
+    try:
+        metadata = os.fstat(descriptor)
+        if not stat.S_ISREG(metadata.st_mode):
+            raise ValueError("Reference image must be a regular file")
+        if metadata.st_size > MAX_REFERENCE_IMAGE_BYTES:
+            raise ValueError("Reference image exceeds the 20 MiB limit")
+        with os.fdopen(descriptor, "rb", closefd=False) as stream:
+            payload = stream.read(MAX_REFERENCE_IMAGE_BYTES + 1)
+        if len(payload) > MAX_REFERENCE_IMAGE_BYTES:
+            raise ValueError("Reference image exceeds the 20 MiB limit")
+        _validate_reference_payload(payload, source.suffix.lower())
+    finally:
+        os.close(descriptor)
+
+    snapshot_descriptor, snapshot_name = tempfile.mkstemp(
+        prefix=".claude-ads-reference-", suffix=source.suffix.lower()
+    )
+    snapshot = Path(snapshot_name)
+    try:
+        if hasattr(os, "fchmod"):
+            os.fchmod(snapshot_descriptor, 0o600)
+        with os.fdopen(snapshot_descriptor, "wb") as stream:
+            stream.write(payload)
+            stream.flush()
+            os.fsync(stream.fileno())
+        yield str(snapshot), hashlib.sha256(payload).hexdigest()
+    finally:
+        snapshot.unlink(missing_ok=True)
 
 
 def _write_private(path: Path, data: bytes) -> None:
@@ -224,7 +533,9 @@ def generate_gemini(prompt: str, width: int, height: int, api_key: str, model: s
             raise ValueError(f"Unsupported reference image format: {Path(reference_image_path).suffix}")
         with open(reference_image_path, 'rb') as f:
             ref_bytes = f.read()
-        mime = 'image/png' if reference_image_path.lower().endswith('.png') else 'image/jpeg'
+        mime = {
+            ".png": "image/png",
+        }[Path(reference_image_path).suffix.lower()]
         ref_part = types.Part.from_bytes(data=ref_bytes, mime_type=mime)
         contents = [
             ref_part,
@@ -460,6 +771,7 @@ def run_batch(
     api_key: str,
     as_json: bool,
     data_lifecycle: Mapping[str, Any],
+    input_root: str | None = None,
 ) -> None:
     """
     Process a batch JSON file of generation jobs.
@@ -475,6 +787,10 @@ def run_batch(
     with open(batch_file) as f:
         jobs = json.load(f)
 
+    if not isinstance(jobs, list) or any(not isinstance(job, dict) for job in jobs):
+        raise ValueError("Batch file must contain a JSON array of job objects")
+    has_references = any(job.get("reference_image") is not None for job in jobs)
+    reference_root = _reference_input_root(input_root) if has_references else Path.cwd()
     if len(jobs) > MAX_BATCH_SIZE:
         print(f"Error: Batch file contains {len(jobs)} jobs, max is {MAX_BATCH_SIZE}", file=sys.stderr)
         sys.exit(1)
@@ -491,9 +807,6 @@ def run_batch(
         output_name = Path(output_name).name
         output_path = resolve_output_path(output_dir_path / output_name)
         reference_image = job.get("reference_image", None)
-        if reference_image and Path(reference_image).suffix.lower() not in _ALLOWED_IMAGE_EXTENSIONS:
-            print("  ⚠ Skipping reference image with an unsupported extension.", file=sys.stderr)
-            reference_image = None
 
         result = {
             "index": i,
@@ -510,8 +823,13 @@ def run_batch(
 
         try:
             print(f"[{i+1}/{len(jobs)}] Generating {output_name}...", file=sys.stderr)
-            reference_sha256 = _reference_image_sha256(reference_image)
-            image_bytes, width, height = generate_image(prompt, ratio, provider, model, api_key, reference_image)
+            with _private_reference_snapshot(reference_image, reference_root) as (
+                reference_snapshot,
+                reference_sha256,
+            ):
+                image_bytes, width, height = generate_image(
+                    prompt, ratio, provider, model, api_key, reference_snapshot
+                )
             _write_private(output_path, image_bytes)
             result["reference_image_sha256"] = reference_sha256
             result["generation_success"] = True
@@ -559,6 +877,13 @@ use --provider/--model or ADS_IMAGE_PROVIDER/ADS_IMAGE_MODEL.
     # Output options
     parser.add_argument("--output", "-o", metavar="FILE", help="Output file path (default: ad_[ratio].png)")
     parser.add_argument("--output-dir", metavar="DIR", default=".", help="Output directory for batch mode")
+    parser.add_argument(
+        "--input-root",
+        metavar="DIR",
+        help="Root containing rights-cleared reference images. Batch references must "
+             "be relative paths beneath this root. CLAUDE_ADS_INPUT_ROOT is used "
+             "when this option is omitted; one of them is required for references.",
+    )
 
     # Dimension options
     dim_group = parser.add_mutually_exclusive_group()
@@ -620,7 +945,16 @@ use --provider/--model or ADS_IMAGE_PROVIDER/ADS_IMAGE_MODEL.
 
     # Batch mode
     if args.batch:
-        run_batch(args.batch, args.output_dir, provider, model, api_key, args.json, data_lifecycle)
+        run_batch(
+            args.batch,
+            args.output_dir,
+            provider,
+            model,
+            api_key,
+            args.json,
+            data_lifecycle,
+            args.input_root,
+        )
         return
 
     # Single image mode
@@ -632,10 +966,21 @@ use --provider/--model or ADS_IMAGE_PROVIDER/ADS_IMAGE_MODEL.
         output_path = f"ad_{safe_ratio}.png"
 
     try:
-        reference_sha256 = _reference_image_sha256(args.reference_image)
-        image_bytes, width, height = generate_image(
-            args.prompt, ratio, provider, model, api_key, args.reference_image
-        )
+        if args.reference_image and not (
+            args.input_root or os.environ.get("CLAUDE_ADS_INPUT_ROOT")
+        ):
+            raise ValueError(
+                "--reference-image requires --input-root or CLAUDE_ADS_INPUT_ROOT; "
+                "use a relative path beneath that root"
+            )
+        direct_root = _reference_input_root(args.input_root) if args.reference_image else Path.cwd()
+        with _private_reference_snapshot(args.reference_image, direct_root) as (
+            reference_snapshot,
+            reference_sha256,
+        ):
+            image_bytes, width, height = generate_image(
+                args.prompt, ratio, provider, model, api_key, reference_snapshot
+            )
     except Exception as e:
         print(f"Error: {_sanitize_error(e)}", file=sys.stderr)
         sys.exit(1)

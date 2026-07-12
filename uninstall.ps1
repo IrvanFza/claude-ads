@@ -40,53 +40,201 @@ function Resolve-TargetPaths {
     }
 }
 
+function Get-NormalizedInstallRoot([string]$Path) {
+    $FullPath = [IO.Path]::GetFullPath($Path)
+    $PathRoot = [IO.Path]::GetPathRoot($FullPath)
+    $Comparison = if ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT) {
+        [StringComparison]::OrdinalIgnoreCase
+    } else {
+        [StringComparison]::Ordinal
+    }
+    if ($FullPath.Equals($PathRoot, $Comparison)) { return $FullPath }
+    $Separators = [char[]]@([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+    return $FullPath.TrimEnd($Separators)
+}
+
 function Main {
     $paths = Resolve-TargetPaths -T $Target
-    $SkillBase = if ($SkillDir) { $SkillDir } else { $paths.SkillBase }
-    $AgentDirResolved = if ($AgentDir) { $AgentDir } else { $paths.AgentDir }
-    $ManifestPath = Join-Path $SkillBase ".claude-ads-$Target.manifest.json"
-
-    if (-not (Test-Path $ManifestPath -PathType Leaf)) {
-        throw "Ownership manifest not found: $ManifestPath. Refusing namespace-based deletion."
-    }
-
-    $Manifest = Get-Content $ManifestPath -Raw | ConvertFrom-Json
-    if ($Manifest.version -ne 1 -or $Manifest.target -ne $Target) {
-        throw "Invalid or mismatched ownership manifest: $ManifestPath"
-    }
-
     $Separators = [char[]]@([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
     $Boundary = [string][IO.Path]::DirectorySeparatorChar
-    $SkillRoot = [IO.Path]::GetFullPath($SkillBase).TrimEnd($Separators) + $Boundary
-    $AgentRoot = [IO.Path]::GetFullPath($AgentDirResolved).TrimEnd($Separators) + $Boundary
-    function Assert-OwnedPath([string]$Path) {
+    $PathComparison = if ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT) {
+        [StringComparison]::OrdinalIgnoreCase
+    } else {
+        [StringComparison]::Ordinal
+    }
+    $StringComparer = if ($PathComparison -eq [StringComparison]::OrdinalIgnoreCase) {
+        [StringComparer]::OrdinalIgnoreCase
+    } else {
+        [StringComparer]::Ordinal
+    }
+    $SkillBase = if ($SkillDir) { $SkillDir } else { $paths.SkillBase }
+    $AgentDirResolved = if ($AgentDir) { $AgentDir } else { $paths.AgentDir }
+    $SkillBase = Get-NormalizedInstallRoot $SkillBase
+    $AgentDirResolved = Get-NormalizedInstallRoot $AgentDirResolved
+
+    function Get-RootPrefix([string]$Root) {
+        if ($Root.EndsWith($Boundary, $PathComparison)) { return $Root }
+        return $Root + $Boundary
+    }
+
+    $SkillRootPrefix = Get-RootPrefix $SkillBase
+    $AgentRootPrefix = Get-RootPrefix $AgentDirResolved
+    if ($SkillBase.Equals($AgentDirResolved, $PathComparison) -or
+        $SkillBase.StartsWith($AgentRootPrefix, $PathComparison) -or
+        $AgentDirResolved.StartsWith($SkillRootPrefix, $PathComparison)) {
+        throw "Skill and agent install roots must not overlap: $SkillBase ; $AgentDirResolved"
+    }
+    $ManifestPath = [IO.Path]::GetFullPath((Join-Path $SkillBase ".claude-ads-$Target.manifest.json"))
+
+    function Get-ContainingRoot([string]$Path) {
         $FullPath = [IO.Path]::GetFullPath($Path)
-        $InSkill = $FullPath.StartsWith($SkillRoot, [StringComparison]::OrdinalIgnoreCase)
-        $InAgents = $FullPath.StartsWith($AgentRoot, [StringComparison]::OrdinalIgnoreCase)
-        if (-not ($InSkill -or $InAgents)) {
+        if ($FullPath.StartsWith($SkillRootPrefix, $PathComparison)) { return $SkillBase }
+        if ($FullPath.StartsWith($AgentRootPrefix, $PathComparison)) { return $AgentDirResolved }
+        throw "Unsafe ownership-manifest path: $Path"
+    }
+
+    function Assert-CanonicalOwnedPath([string]$Path) {
+        if ([string]::IsNullOrWhiteSpace($Path)) { throw "Invalid empty ownership-manifest path" }
+        $FullPath = [IO.Path]::GetFullPath($Path)
+        if (-not $Path.Equals($FullPath, $PathComparison)) {
+            throw "Non-canonical ownership-manifest path: $Path"
+        }
+        try { $null = Get-ContainingRoot $FullPath } catch {
             throw "Unsafe ownership-manifest path: $Path"
         }
         return $FullPath
     }
 
-    $AllOwnedPaths = @($Manifest.files) + @($Manifest.directories) + @($Manifest.recursive_directories)
-    foreach ($OwnedPath in $AllOwnedPaths) { $null = Assert-OwnedPath $OwnedPath }
+    function Assert-NoReparseChain([string]$Path, [string]$StopAt = '') {
+        $FullPath = [IO.Path]::GetFullPath($Path)
+        $StopPath = if ($StopAt) { [IO.Path]::GetFullPath($StopAt) } else { '' }
+        $Current = $FullPath
+        while ($true) {
+            $Item = Get-Item -LiteralPath $Current -Force -ErrorAction SilentlyContinue
+            if ($null -ne $Item) {
+                if (($Item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+                    throw "Refusing reparse-point uninstall path: $Current"
+                }
+                if (-not $Current.Equals($FullPath, $PathComparison) -and -not $Item.PSIsContainer) {
+                    throw "Uninstall path parent is not a directory: $Current"
+                }
+            }
+            if ($StopPath -and $Current.Equals($StopPath, $PathComparison)) { break }
+            $Parent = [IO.Path]::GetDirectoryName($Current)
+            if ([string]::IsNullOrEmpty($Parent) -or $Parent.Equals($Current, $PathComparison)) { break }
+            $Current = $Parent
+        }
+        return $FullPath
+    }
+
+    function Assert-SafeRecursiveTree([string]$Path) {
+        $Root = Get-ContainingRoot $Path
+        [void](Assert-NoReparseChain $Path $Root)
+        $Item = Get-Item -LiteralPath $Path -Force -ErrorAction SilentlyContinue
+        if ($null -eq $Item) { return }
+        if (-not $Item.PSIsContainer) { throw "Recursive ownership entry is not a directory: $Path" }
+        $Pending = [System.Collections.Generic.Stack[string]]::new()
+        $Pending.Push([IO.Path]::GetFullPath($Path))
+        while ($Pending.Count -gt 0) {
+            $Directory = $Pending.Pop()
+            [void](Assert-NoReparseChain $Directory $Root)
+            foreach ($Child in @(Get-ChildItem -LiteralPath $Directory -Force)) {
+                if (($Child.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+                    throw "Refusing reparse point inside recursive ownership directory: $($Child.FullName)"
+                }
+                if ($Child.PSIsContainer) { $Pending.Push($Child.FullName) }
+            }
+        }
+    }
+
+    function Assert-CurrentUserOwnedFile([string]$Path) {
+        if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) { return }
+        $Identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+        $OwnerSid = (Get-Acl -LiteralPath $Path).GetOwner([Security.Principal.SecurityIdentifier])
+        $CallerSids = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+        if ($null -ne $Identity.User) { [void]$CallerSids.Add($Identity.User.Value) }
+        foreach ($Group in @($Identity.Groups)) { [void]$CallerSids.Add($Group.Value) }
+        if ($null -eq $OwnerSid -or -not $CallerSids.Contains($OwnerSid.Value)) {
+            throw "Ownership manifest is not owned by the current Windows principal: $Path"
+        }
+    }
+
+    [void](Assert-NoReparseChain $SkillBase)
+    [void](Assert-NoReparseChain $AgentDirResolved)
+    [void](Assert-NoReparseChain $ManifestPath $SkillBase)
+    $ManifestItem = Get-Item -LiteralPath $ManifestPath -Force -ErrorAction SilentlyContinue
+    if ($null -eq $ManifestItem -or $ManifestItem.PSIsContainer -or
+        (($ManifestItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0)) {
+        throw "Ownership manifest not found or unsafe: $ManifestPath. Refusing namespace-based deletion."
+    }
+    Assert-CurrentUserOwnedFile $ManifestPath
+    try { $Manifest = Get-Content -LiteralPath $ManifestPath -Raw | ConvertFrom-Json } catch {
+        throw "Invalid ownership manifest: $ManifestPath"
+    }
+    $ExpectedProperties = @('version','target','files','directories','recursive_directories')
+    $ActualProperties = @($Manifest.PSObject.Properties.Name)
+    $VersionType = if ($null -eq $Manifest.version) { $null } else { $Manifest.version.GetType() }
+    if (@(Compare-Object $ExpectedProperties $ActualProperties).Count -ne 0 -or
+        $VersionType -notin @([int], [long]) -or $Manifest.version -ne 1 -or
+        -not ($Manifest.target -is [string]) -or $Manifest.target -cne $Target) {
+        throw "Invalid or mismatched ownership manifest: $ManifestPath"
+    }
+
+    $AllPaths = [System.Collections.Generic.HashSet[string]]::new($StringComparer)
+    $Validated = @{}
+    foreach ($PropertyName in @('files','directories','recursive_directories')) {
+        if (-not ($Manifest.$PropertyName -is [System.Array])) {
+            throw "Ownership manifest property must be an array: $PropertyName"
+        }
+        $Paths = [System.Collections.Generic.List[string]]::new()
+        foreach ($OwnedPath in @($Manifest.$PropertyName)) {
+            if (-not ($OwnedPath -is [string])) {
+                throw "Invalid ownership-manifest entry in ${PropertyName}: $ManifestPath"
+            }
+            $FullPath = Assert-CanonicalOwnedPath $OwnedPath
+            if (-not $AllPaths.Add($FullPath)) { throw "Duplicate ownership-manifest path: $FullPath" }
+            [void](Assert-NoReparseChain $FullPath (Get-ContainingRoot $FullPath))
+            $Item = Get-Item -LiteralPath $FullPath -Force -ErrorAction SilentlyContinue
+            if ($null -ne $Item) {
+                if ($PropertyName -eq 'files' -and $Item.PSIsContainer) {
+                    throw "Owned file entry is a directory: $FullPath"
+                }
+                if ($PropertyName -ne 'files' -and -not $Item.PSIsContainer) {
+                    throw "Owned directory entry is not a directory: $FullPath"
+                }
+            }
+            [void]$Paths.Add($FullPath)
+        }
+        $Validated[$PropertyName] = $Paths
+    }
+    foreach ($RecursivePath in $Validated.recursive_directories) { Assert-SafeRecursiveTree $RecursivePath }
 
     Write-Host "Uninstalling Claude Ads from $SkillBase and $AgentDirResolved..."
 
-    foreach ($OwnedFile in @($Manifest.files)) {
-        $FullPath = Assert-OwnedPath $OwnedFile
-        if (Test-Path $FullPath) { Remove-Item -LiteralPath $FullPath -Force }
+    foreach ($FullPath in $Validated.files) {
+        [void](Assert-NoReparseChain $FullPath (Get-ContainingRoot $FullPath))
+        $Item = Get-Item -LiteralPath $FullPath -Force -ErrorAction SilentlyContinue
+        if ($null -ne $Item) {
+            if ($Item.PSIsContainer -or (($Item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0)) {
+                throw "Owned file changed type before deletion: $FullPath"
+            }
+            Remove-Item -LiteralPath $FullPath -Force
+        }
     }
 
-    foreach ($OwnedDir in @($Manifest.recursive_directories)) {
-        $FullPath = Assert-OwnedPath $OwnedDir
-        if (Test-Path $FullPath) { Remove-Item -LiteralPath $FullPath -Recurse -Force }
+    foreach ($FullPath in $Validated.recursive_directories) {
+        Assert-SafeRecursiveTree $FullPath
+        $Item = Get-Item -LiteralPath $FullPath -Force -ErrorAction SilentlyContinue
+        if ($null -ne $Item) { Remove-Item -LiteralPath $FullPath -Recurse -Force }
     }
 
-    foreach ($OwnedDir in @($Manifest.directories) | Sort-Object Length -Descending) {
-        $FullPath = Assert-OwnedPath $OwnedDir
-        if (Test-Path $FullPath) {
+    foreach ($FullPath in @($Validated.directories | Sort-Object Length -Descending)) {
+        [void](Assert-NoReparseChain $FullPath (Get-ContainingRoot $FullPath))
+        $Item = Get-Item -LiteralPath $FullPath -Force -ErrorAction SilentlyContinue
+        if ($null -ne $Item) {
+            if (-not $Item.PSIsContainer -or (($Item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0)) {
+                throw "Owned directory changed type before deletion: $FullPath"
+            }
             $Children = @(Get-ChildItem -LiteralPath $FullPath -Force -ErrorAction SilentlyContinue)
             if ($Children.Count -eq 0) {
                 Remove-Item -LiteralPath $FullPath -Force -Confirm:$false
@@ -94,6 +242,12 @@ function Main {
         }
     }
 
+    [void](Assert-NoReparseChain $ManifestPath $SkillBase)
+    $ManifestItem = Get-Item -LiteralPath $ManifestPath -Force -ErrorAction SilentlyContinue
+    if ($null -eq $ManifestItem -or $ManifestItem.PSIsContainer -or
+        (($ManifestItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0)) {
+        throw "Ownership manifest changed before deletion: $ManifestPath"
+    }
     Remove-Item -LiteralPath $ManifestPath -Force
 
     Write-Host "[OK] Claude Ads uninstalled." -ForegroundColor Green

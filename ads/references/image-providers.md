@@ -41,6 +41,16 @@ claim, or third-party work without documented rights and approval.
 Use a current provider quote, console, or official price source when cost matters.
 Record currency, tax basis, resolution/quality, number of variants, retrieval date,
 and whether the figure is an estimate. Present expected maximum cost before a batch.
+
+Reference images are local confidential inputs, not paths that a batch document may
+choose freely. Put rights-cleared references beneath `CLAUDE_ADS_INPUT_ROOT` (or pass
+`--input-root`) and use relative paths only. Batch mode defaults this boundary to the
+environment value; there is no implicit input authority. Absolute paths, traversal,
+symlinks, non-regular files, and references larger than 20 MiB are rejected before
+provider dispatch. Reference inputs accept a conservative PNG subset only: bounded,
+8-bit, non-interlaced grayscale/RGB images with optional alpha. Core chunks, CRCs,
+headers, compressed streams, scanline sizes, and filter bytes are validated before
+dispatch; convert palette, 16-bit, interlaced, or JPEG references first.
 Never infer pricing or quota from a legacy table, and never retry indefinitely.
 
 On throttling or transient service failure, follow the provider's documented retry

@@ -125,7 +125,10 @@ The installer:
   helper scripts.
 - Installs deterministic core tooling and optional runtime dependencies into a
   managed virtual environment for supported hosts.
-- Records every owned file and directory.
+- Refuses to overwrite pre-existing files unless the prior valid manifest owns
+  them. The PowerShell installer additionally preflights its complete destination
+  plan, managed environment, and intermediate directories before mutation.
+- Records installed files and owned directories for bounded uninstall.
 
 Uninstall only manifest-owned files:
 

@@ -17,8 +17,10 @@ Only the latest version receives security updates.
 ## Security Practices
 
 - No credentials or API keys are stored in this repository
-- Install scripts write only to the configured host roots, canonicalize destinations,
-  reject symlink escapes, and record an exact ownership manifest
+- Install scripts write only to configured host roots, canonicalize destinations,
+  reject link escapes and unowned file collisions, and record an ownership manifest.
+  The Windows installer preflights its complete plan and rejects reparse-point,
+  managed-environment, and late-file collisions before its first destination write.
 - Python dependencies install in isolated virtual environments
 - Shared SSRF validation (`scripts/url_utils.py`) rejects non-public IPv4/IPv6,
   pins Requests to the validated numeric address while preserving Host/SNI/TLS

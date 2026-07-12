@@ -119,6 +119,35 @@ function Test-InstallPath {
     return $true
 }
 
+function Get-NormalizedInstallRoot([string]$Path) {
+    $FullPath = [IO.Path]::GetFullPath($Path)
+    $PathRoot = [IO.Path]::GetPathRoot($FullPath)
+    $Comparison = if ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT) {
+        [StringComparison]::OrdinalIgnoreCase
+    } else {
+        [StringComparison]::Ordinal
+    }
+    if ($FullPath.Equals($PathRoot, $Comparison)) { return $FullPath }
+    $Separators = [char[]]@([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+    return $FullPath.TrimEnd($Separators)
+}
+
+function Get-CompatibleRelativePath([string]$BasePath, [string]$ChildPath) {
+    $Separators = [char[]]@([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+    $Boundary = [string][IO.Path]::DirectorySeparatorChar
+    $Comparison = if ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT) {
+        [StringComparison]::OrdinalIgnoreCase
+    } else {
+        [StringComparison]::Ordinal
+    }
+    $Base = [IO.Path]::GetFullPath($BasePath).TrimEnd($Separators) + $Boundary
+    $Child = [IO.Path]::GetFullPath($ChildPath)
+    if (-not $Child.StartsWith($Base, $Comparison)) {
+        throw "Source path is outside its declared base: $ChildPath"
+    }
+    return $Child.Substring($Base.Length)
+}
+
 function Main {
     $paths = Resolve-TargetPaths -T $Target
     $SkillBase = $paths.SkillBase
@@ -141,12 +170,213 @@ function Main {
         $AgentDirResolved = $AgentDir
     }
 
-    $SkillDirResolved = Join-Path $SkillBase "ads"
-    $ManifestPath = Join-Path $SkillBase ".claude-ads-$Target.manifest.json"
+    # Normalize the configured roots before deriving any destination.  The
+    # installer records and compares only these absolute lexical forms; any
+    # existing reparse point in their ancestry is rejected below.
+    $Separators = [char[]]@([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+    $Boundary = [string][IO.Path]::DirectorySeparatorChar
+    $PathComparison = if ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT) {
+        [StringComparison]::OrdinalIgnoreCase
+    } else {
+        [StringComparison]::Ordinal
+    }
+    $SkillBase = Get-NormalizedInstallRoot $SkillBase
+    $AgentDirResolved = Get-NormalizedInstallRoot $AgentDirResolved
+    $SkillRootPrefix = if ($SkillBase.EndsWith($Boundary, $PathComparison)) { $SkillBase } else { $SkillBase + $Boundary }
+    $AgentRootPrefix = if ($AgentDirResolved.EndsWith($Boundary, $PathComparison)) { $AgentDirResolved } else { $AgentDirResolved + $Boundary }
+    if ($SkillBase.Equals($AgentDirResolved, $PathComparison) -or
+        $SkillBase.StartsWith($AgentRootPrefix, $PathComparison) -or
+        $AgentDirResolved.StartsWith($SkillRootPrefix, $PathComparison)) {
+        throw "Skill and agent install roots must not overlap: $SkillBase ; $AgentDirResolved"
+    }
+    $SkillDirResolved = [IO.Path]::GetFullPath((Join-Path $SkillBase "ads"))
+    $ManifestPath = [IO.Path]::GetFullPath((Join-Path $SkillBase ".claude-ads-$Target.manifest.json"))
     $RepoUrl = "https://github.com/AI-Marketing-Hub/claude-ads"
-    $OwnedFiles = [System.Collections.Generic.List[string]]::new()
-    $OwnedDirs = [System.Collections.Generic.List[string]]::new()
-    $RecursiveDirs = [System.Collections.Generic.List[string]]::new()
+    $StringComparer = if ($PathComparison -eq [StringComparison]::OrdinalIgnoreCase) {
+        [StringComparer]::OrdinalIgnoreCase
+    } else {
+        [StringComparer]::Ordinal
+    }
+
+    function Get-RootPrefix([string]$Root) {
+        if ($Root.EndsWith($Boundary, $PathComparison)) { return $Root }
+        return $Root + $Boundary
+    }
+
+    function Test-PathWithinConfiguredRoots([string]$Path) {
+        $FullPath = [IO.Path]::GetFullPath($Path)
+        foreach ($Root in @($SkillBase, $AgentDirResolved)) {
+            if ($FullPath.Equals($Root, $PathComparison) -or
+                $FullPath.StartsWith((Get-RootPrefix $Root), $PathComparison)) {
+                return $true
+            }
+        }
+        return $false
+    }
+
+    function Assert-ConfiguredDestination([string]$Path) {
+        $FullPath = [IO.Path]::GetFullPath($Path)
+        if (-not (Test-PathWithinConfiguredRoots $FullPath)) {
+            throw "Install destination escapes configured roots: $Path"
+        }
+        return $FullPath
+    }
+
+    function Get-ContainingConfiguredRoot([string]$Path) {
+        $FullPath = Assert-ConfiguredDestination $Path
+        $Candidates = @(@($SkillBase, $AgentDirResolved) | Where-Object {
+            $FullPath.Equals($_, $PathComparison) -or
+            $FullPath.StartsWith((Get-RootPrefix $_), $PathComparison)
+        } | Sort-Object Length -Descending)
+        if ($Candidates.Count -eq 0) { throw "Install destination escapes configured roots: $Path" }
+        return [string]$Candidates[0]
+    }
+
+    function Assert-CurrentUserOwnedFile([string]$Path) {
+        if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) { return }
+        $Identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+        $OwnerSid = (Get-Acl -LiteralPath $Path).GetOwner([Security.Principal.SecurityIdentifier])
+        $CallerSids = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+        if ($null -ne $Identity.User) { [void]$CallerSids.Add($Identity.User.Value) }
+        foreach ($Group in @($Identity.Groups)) { [void]$CallerSids.Add($Group.Value) }
+        if ($null -eq $OwnerSid -or -not $CallerSids.Contains($OwnerSid.Value)) {
+            throw "Ownership authority is not owned by the current Windows identity: $Path"
+        }
+    }
+
+    function Assert-NoReparseChain([string]$Path, [string]$StopAt = '') {
+        $FullPath = [IO.Path]::GetFullPath($Path)
+        $StopPath = if ($StopAt) { [IO.Path]::GetFullPath($StopAt) } else { '' }
+        $Current = $FullPath
+        while ($true) {
+            $Item = Get-Item -LiteralPath $Current -Force -ErrorAction SilentlyContinue
+            if ($null -ne $Item) {
+                if (($Item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+                    throw "Refusing reparse-point install path: $Current"
+                }
+                if (-not $Current.Equals($FullPath, $PathComparison) -and -not $Item.PSIsContainer) {
+                    throw "Install path parent is not a directory: $Current"
+                }
+            }
+            if ($StopPath -and $Current.Equals($StopPath, $PathComparison)) { break }
+            $Parent = [IO.Path]::GetDirectoryName($Current)
+            if ([string]::IsNullOrEmpty($Parent) -or $Parent.Equals($Current, $PathComparison)) { break }
+            $Current = $Parent
+        }
+        return $FullPath
+    }
+
+    function Assert-SafeRecursiveTree([string]$Path) {
+        $Root = Get-ContainingConfiguredRoot $Path
+        [void](Assert-NoReparseChain $Path $Root)
+        $Item = Get-Item -LiteralPath $Path -Force -ErrorAction SilentlyContinue
+        if ($null -eq $Item) { return }
+        if (-not $Item.PSIsContainer) { throw "Managed recursive path is not a directory: $Path" }
+        $Pending = [System.Collections.Generic.Stack[string]]::new()
+        $Pending.Push([IO.Path]::GetFullPath($Path))
+        while ($Pending.Count -gt 0) {
+            $Directory = $Pending.Pop()
+            [void](Assert-NoReparseChain $Directory $Root)
+            foreach ($Child in @(Get-ChildItem -LiteralPath $Directory -Force)) {
+                if (($Child.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+                    throw "Refusing reparse point inside managed recursive directory: $($Child.FullName)"
+                }
+                if ($Child.PSIsContainer) { $Pending.Push($Child.FullName) }
+            }
+        }
+    }
+
+    function Assert-SafeConfiguredRoot([string]$Root) {
+        $FullRoot = Assert-NoReparseChain $Root
+        $Item = Get-Item -LiteralPath $FullRoot -Force -ErrorAction SilentlyContinue
+        if ($null -ne $Item -and -not $Item.PSIsContainer) {
+            throw "Configured install root is not a directory: $FullRoot"
+        }
+        return $FullRoot
+    }
+
+    function Read-ValidPriorManifest {
+        $PriorFiles = [System.Collections.Generic.HashSet[string]]::new($StringComparer)
+        $PriorDirectories = [System.Collections.Generic.HashSet[string]]::new($StringComparer)
+        $PriorRecursiveDirs = [System.Collections.Generic.HashSet[string]]::new($StringComparer)
+        $ManifestItem = Get-Item -LiteralPath $ManifestPath -Force -ErrorAction SilentlyContinue
+        if ($null -eq $ManifestItem) {
+            return @{
+                Files = $PriorFiles
+                Directories = $PriorDirectories
+                RecursiveDirectories = $PriorRecursiveDirs
+            }
+        }
+        if ($ManifestItem.PSIsContainer -or
+            (($ManifestItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0)) {
+            throw "Invalid ownership manifest path: $ManifestPath"
+        }
+        Assert-CurrentUserOwnedFile $ManifestPath
+        try {
+            $PriorManifest = Get-Content -LiteralPath $ManifestPath -Raw | ConvertFrom-Json
+        } catch {
+            throw "Invalid ownership manifest: $ManifestPath"
+        }
+        $ExpectedProperties = @('version','target','files','directories','recursive_directories')
+        $ActualProperties = @($PriorManifest.PSObject.Properties.Name)
+        $VersionType = if ($null -eq $PriorManifest.version) { $null } else { $PriorManifest.version.GetType() }
+        if (@(Compare-Object $ExpectedProperties $ActualProperties).Count -ne 0 -or
+            $VersionType -notin @([int], [long]) -or $PriorManifest.version -ne 1 -or
+            -not ($PriorManifest.target -is [string]) -or $PriorManifest.target -cne $Target) {
+            throw "Invalid or mismatched ownership manifest: $ManifestPath"
+        }
+        $AllPriorPaths = [System.Collections.Generic.HashSet[string]]::new($StringComparer)
+        foreach ($PropertyName in @('files','directories','recursive_directories')) {
+            if (-not ($PriorManifest.$PropertyName -is [System.Array])) {
+                throw "Ownership manifest property must be an array: $PropertyName"
+            }
+            foreach ($OwnedPath in @($PriorManifest.$PropertyName)) {
+                if (-not ($OwnedPath -is [string]) -or [string]::IsNullOrWhiteSpace($OwnedPath)) {
+                    throw "Invalid ownership-manifest entry in ${PropertyName}: $ManifestPath"
+                }
+                $Canonical = Assert-ConfiguredDestination $OwnedPath
+                if (-not $OwnedPath.Equals($Canonical, $PathComparison)) {
+                    throw "Non-canonical ownership-manifest path: $OwnedPath"
+                }
+                if ($Canonical.Equals($SkillBase, $PathComparison) -or
+                    $Canonical.Equals($AgentDirResolved, $PathComparison)) {
+                    throw "Ownership manifest cannot own a configured root: $Canonical"
+                }
+                if (-not $AllPriorPaths.Add($Canonical)) {
+                    throw "Duplicate ownership-manifest path: $Canonical"
+                }
+                [void](Assert-NoReparseChain $Canonical (Get-ContainingConfiguredRoot $Canonical))
+                $OwnedItem = Get-Item -LiteralPath $Canonical -Force -ErrorAction SilentlyContinue
+                if ($null -ne $OwnedItem) {
+                    if ($PropertyName -eq 'files' -and $OwnedItem.PSIsContainer) {
+                        throw "Owned file entry is a directory: $Canonical"
+                    }
+                    if ($PropertyName -ne 'files' -and -not $OwnedItem.PSIsContainer) {
+                        throw "Owned directory entry is not a directory: $Canonical"
+                    }
+                }
+                if ($PropertyName -eq 'files') {
+                    if (-not $PriorFiles.Add($Canonical)) {
+                        throw "Duplicate ownership-manifest file: $Canonical"
+                    }
+                } elseif ($PropertyName -eq 'directories') {
+                    if (-not $PriorDirectories.Add($Canonical)) {
+                        throw "Duplicate ownership-manifest directory: $Canonical"
+                    }
+                } elseif ($PropertyName -eq 'recursive_directories') {
+                    if (-not $PriorRecursiveDirs.Add($Canonical)) {
+                        throw "Duplicate recursive ownership-manifest directory: $Canonical"
+                    }
+                }
+            }
+        }
+        foreach ($RecursivePath in $PriorRecursiveDirs) { Assert-SafeRecursiveTree $RecursivePath }
+        return @{
+            Files = $PriorFiles
+            Directories = $PriorDirectories
+            RecursiveDirectories = $PriorRecursiveDirs
+        }
+    }
 
     Write-Host "=================================="
     Write-Host "   Claude Ads - Installer"
@@ -192,10 +422,6 @@ function Main {
     }
     Write-Host "OK Distribution source: $Source" -ForegroundColor Green
 
-    # Create directories
-    New-Item -ItemType Directory -Path (Join-Path $SkillDirResolved "references") -Force | Out-Null
-    New-Item -ItemType Directory -Path $AgentDirResolved -Force | Out-Null
-
     # Clone to temp directory
     $TempDir = $null
 
@@ -210,120 +436,197 @@ function Main {
             $SourceDir = "$TempDir\claude-ads"
         }
 
-        # Copy main skill + references
-        Write-Host "Installing skill files..."
-        Copy-Item "$SourceDir\ads\SKILL.md" -Destination "$SkillDirResolved\SKILL.md" -Force
-        [void]$OwnedFiles.Add((Join-Path $SkillDirResolved "SKILL.md"))
-        Get-ChildItem "$SourceDir\ads\references\*.md" -File | ForEach-Object {
-            $Destination = Join-Path "$SkillDirResolved\references" $_.Name
-            Copy-Item $_.FullName -Destination $Destination -Force
-            [void]$OwnedFiles.Add($Destination)
-        }
-        [void]$OwnedDirs.Add((Join-Path $SkillDirResolved "references"))
-        $InterfaceSource = Join-Path $SourceDir "ads\agents"
-        if (Test-Path $InterfaceSource) {
-            $InterfaceDir = Join-Path $SkillDirResolved "agents"
-            New-Item -ItemType Directory -Path $InterfaceDir -Force | Out-Null
-            Get-ChildItem "$InterfaceSource\*.yaml" -File | ForEach-Object {
-                $Destination = Join-Path $InterfaceDir $_.Name
-                Copy-Item $_.FullName -Destination $Destination -Force
-                [void]$OwnedFiles.Add($Destination)
-            }
-            [void]$OwnedDirs.Add($InterfaceDir)
-        }
+        # Build the complete destination plan without touching either configured
+        # root.  This lets any collision fail before the first install mutation.
+        $FilePlan = [System.Collections.Generic.List[object]]::new()
+        $PlannedFiles = [System.Collections.Generic.HashSet[string]]::new($StringComparer)
+        $PlannedDirs = [System.Collections.Generic.List[string]]::new()
+        $PlannedDirSet = [System.Collections.Generic.HashSet[string]]::new($StringComparer)
+        $RecursiveDirs = [System.Collections.Generic.List[string]]::new()
 
-        # Copy sub-skills
-        Write-Host "Installing sub-skills..."
-        Get-ChildItem "$SourceDir\skills" -Directory | ForEach-Object {
-            $TargetDir = Join-Path $SkillBase $_.Name
-            New-Item -ItemType Directory -Path $TargetDir -Force | Out-Null
-            Copy-Item (Join-Path $_.FullName "SKILL.md") -Destination "$TargetDir\SKILL.md" -Force
-            [void]$OwnedFiles.Add((Join-Path $TargetDir "SKILL.md"))
-
-            # Copy assets (industry templates) if they exist
-            $AssetsDir = Join-Path $_.FullName "assets"
-            if (Test-Path $AssetsDir) {
-                $TargetAssets = Join-Path $TargetDir "assets"
-                New-Item -ItemType Directory -Path $TargetAssets -Force | Out-Null
-                Get-ChildItem "$AssetsDir\*.md" -File | ForEach-Object {
-                    $Destination = Join-Path $TargetAssets $_.Name
-                    Copy-Item $_.FullName -Destination $Destination -Force
-                    [void]$OwnedFiles.Add($Destination)
+        function Add-PlannedDirectory([string]$Destination) {
+            $Canonical = Assert-ConfiguredDestination $Destination
+            $Current = $Canonical
+            while (-not ($Current.Equals($SkillBase, $PathComparison) -or
+                $Current.Equals($AgentDirResolved, $PathComparison))) {
+                if ($PlannedDirSet.Add($Current)) { [void]$PlannedDirs.Add($Current) }
+                $Parent = [IO.Path]::GetDirectoryName($Current)
+                if ([string]::IsNullOrEmpty($Parent) -or $Parent.Equals($Current, $PathComparison)) {
+                    throw "Install directory escapes configured roots: $Destination"
                 }
-                [void]$OwnedDirs.Add($TargetAssets)
+                $Current = $Parent
             }
-            [void]$OwnedDirs.Add($TargetDir)
+            return $Canonical
         }
 
-        # Copy agents
-        Write-Host "Installing subagents..."
-        Get-ChildItem "$SourceDir\agents\*.md" -File | ForEach-Object {
-            $Destination = Join-Path $AgentDirResolved $_.Name
-            Copy-Item $_.FullName -Destination $Destination -Force
-            [void]$OwnedFiles.Add($Destination)
+        function Add-PlannedFile([string]$SourcePath, [string]$Destination) {
+            $Canonical = Assert-ConfiguredDestination $Destination
+            if (-not $PlannedFiles.Add($Canonical)) {
+                throw "Duplicate planned install file: $Canonical"
+            }
+            [void](Add-PlannedDirectory ([IO.Path]::GetDirectoryName($Canonical)))
+            [void]$FilePlan.Add([pscustomobject]@{
+                Source = [IO.Path]::GetFullPath($SourcePath)
+                Destination = $Canonical
+            })
         }
 
-        # Copy scripts (optional Python tools)
-        $ScriptsSource = "$SourceDir\scripts"
-        if (Test-Path $ScriptsSource) {
-            Write-Host "Installing Python scripts..."
-            $ScriptsDir = Join-Path $SkillDirResolved "scripts"
-            New-Item -ItemType Directory -Path $ScriptsDir -Force | Out-Null
-            Get-ChildItem "$ScriptsSource\*.py" -File | ForEach-Object {
-                $Destination = Join-Path $ScriptsDir $_.Name
-                Copy-Item $_.FullName -Destination $Destination -Force
-                [void]$OwnedFiles.Add($Destination)
+        [void](Add-PlannedDirectory $SkillDirResolved)
+        $ReferencesDir = Add-PlannedDirectory (Join-Path $SkillDirResolved "references")
+        Add-PlannedFile (Join-Path $SourceDir "ads\SKILL.md") (Join-Path $SkillDirResolved "SKILL.md")
+        Get-ChildItem (Join-Path $SourceDir "ads\references\*.md") -File | Sort-Object Name | ForEach-Object {
+            Add-PlannedFile $_.FullName (Join-Path $ReferencesDir $_.Name)
+        }
+
+        $InterfaceSource = Join-Path $SourceDir "ads\agents"
+        if (Test-Path -LiteralPath $InterfaceSource -PathType Container) {
+            $InterfaceDir = Add-PlannedDirectory (Join-Path $SkillDirResolved "agents")
+            Get-ChildItem (Join-Path $InterfaceSource "*.yaml") -File | Sort-Object Name | ForEach-Object {
+                Add-PlannedFile $_.FullName (Join-Path $InterfaceDir $_.Name)
             }
-            Copy-Item "$SourceDir\requirements.txt" -Destination "$SkillDirResolved\requirements.txt" -Force
-            [void]$OwnedFiles.Add((Join-Path $SkillDirResolved "requirements.txt"))
-            Copy-Item "$SourceDir\requirements.lock" -Destination "$SkillDirResolved\requirements.lock" -Force
-            [void]$OwnedFiles.Add((Join-Path $SkillDirResolved "requirements.lock"))
+        }
+
+        Get-ChildItem (Join-Path $SourceDir "skills") -Directory | Sort-Object Name | ForEach-Object {
+            $TargetDir = Add-PlannedDirectory (Join-Path $SkillBase $_.Name)
+            Add-PlannedFile (Join-Path $_.FullName "SKILL.md") (Join-Path $TargetDir "SKILL.md")
+            $AssetsDir = Join-Path $_.FullName "assets"
+            if (Test-Path -LiteralPath $AssetsDir -PathType Container) {
+                $TargetAssets = Add-PlannedDirectory (Join-Path $TargetDir "assets")
+                Get-ChildItem (Join-Path $AssetsDir "*.md") -File | Sort-Object Name | ForEach-Object {
+                    Add-PlannedFile $_.FullName (Join-Path $TargetAssets $_.Name)
+                }
+            }
+        }
+
+        Get-ChildItem (Join-Path $SourceDir "agents\*.md") -File | Sort-Object Name | ForEach-Object {
+            Add-PlannedFile $_.FullName (Join-Path $AgentDirResolved $_.Name)
+        }
+
+        $ScriptsSource = Join-Path $SourceDir "scripts"
+        $ScriptsDir = Join-Path $SkillDirResolved "scripts"
+        if (Test-Path -LiteralPath $ScriptsSource -PathType Container) {
+            $ScriptsDir = Add-PlannedDirectory $ScriptsDir
+            Get-ChildItem (Join-Path $ScriptsSource "*.py") -File | Sort-Object Name | ForEach-Object {
+                Add-PlannedFile $_.FullName (Join-Path $ScriptsDir $_.Name)
+            }
+            Add-PlannedFile (Join-Path $SourceDir "requirements.txt") (Join-Path $SkillDirResolved "requirements.txt")
+            Add-PlannedFile (Join-Path $SourceDir "requirements.lock") (Join-Path $SkillDirResolved "requirements.lock")
             $CoreSource = Join-Path $SourceDir "claude_ads_core"
-            $CoreDir = Join-Path $ScriptsDir "claude_ads_core"
+            $CoreDir = Add-PlannedDirectory (Join-Path $ScriptsDir "claude_ads_core")
             Get-ChildItem $CoreSource -File -Recurse | Where-Object {
                 $_.Extension -in @(".py", ".json") -and $_.FullName -notmatch "[\\/]__pycache__[\\/]"
-            } | ForEach-Object {
-                $Relative = [System.IO.Path]::GetRelativePath($CoreSource, $_.FullName)
-                $Destination = Join-Path $CoreDir $Relative
-                New-Item -ItemType Directory -Path (Split-Path $Destination -Parent) -Force | Out-Null
-                Copy-Item $_.FullName -Destination $Destination -Force
-                [void]$OwnedFiles.Add($Destination)
+            } | Sort-Object FullName | ForEach-Object {
+                $Relative = Get-CompatibleRelativePath $CoreSource $_.FullName
+                Add-PlannedFile $_.FullName (Join-Path $CoreDir $Relative)
             }
-            Get-ChildItem $CoreSource -Directory -Recurse | Where-Object {
-                $_.FullName -notmatch "[\\/]__pycache__(?:[\\/]|$)"
-            } | ForEach-Object {
-                $Relative = [System.IO.Path]::GetRelativePath($CoreSource, $_.FullName)
-                [void]$OwnedDirs.Add((Join-Path $CoreDir $Relative))
-            }
-            [void]$OwnedDirs.Add($CoreDir)
-            [void]$OwnedDirs.Add($ScriptsDir)
         }
 
-        # Commit ownership before dependency installation so a later pip
-        # failure is always recoverable with uninstall.
-        $VenvDir = Join-Path $SkillDirResolved ".venv"
+        $VenvDir = Assert-ConfiguredDestination (Join-Path $SkillDirResolved ".venv")
+        $ReceiptPath = Assert-ConfiguredDestination (Join-Path $SkillDirResolved "managed-runtime-receipt.json")
         if ($AllowPip -and -not $NoDeps) {
             [void]$RecursiveDirs.Add($VenvDir)
-            [void]$OwnedFiles.Add((Join-Path $SkillDirResolved "managed-runtime-receipt.json"))
+            if (-not $PlannedFiles.Add($ReceiptPath)) {
+                throw "Duplicate planned install file: $ReceiptPath"
+            }
         }
-        [void]$OwnedDirs.Add($SkillDirResolved)
+
+        # Validate the previous ownership state, then preflight every root,
+        # directory, file, receipt, and managed environment before mutation.
+        # On Windows the local manifest must belong to the caller's user SID or
+        # one of its token-group owner principals. A process with that same
+        # principal can still alter it; a local manifest cannot defend against
+        # that without a separately privileged or external trust root.
+        $Prior = Read-ValidPriorManifest
+        $PriorFiles = $Prior.Files
+        $PriorDirectories = $Prior.Directories
+        $PriorRecursiveDirs = $Prior.RecursiveDirectories
+        [void](Assert-SafeConfiguredRoot $SkillBase)
+        [void](Assert-SafeConfiguredRoot $AgentDirResolved)
+        foreach ($Directory in $PlannedDirs) {
+            [void](Assert-NoReparseChain $Directory (Get-ContainingConfiguredRoot $Directory))
+            $DirectoryItem = Get-Item -LiteralPath $Directory -Force -ErrorAction SilentlyContinue
+            if ($null -ne $DirectoryItem -and -not $DirectoryItem.PSIsContainer) {
+                throw "Install directory destination is not a directory: $Directory"
+            }
+        }
+        foreach ($Destination in $PlannedFiles) {
+            $ContainingRoot = Get-ContainingConfiguredRoot $Destination
+            [void](Assert-NoReparseChain $Destination $ContainingRoot)
+            $DestinationItem = Get-Item -LiteralPath $Destination -Force -ErrorAction SilentlyContinue
+            if ($null -ne $DestinationItem) {
+                if ($DestinationItem.PSIsContainer -or -not $PriorFiles.Contains($Destination)) {
+                    throw "Refusing to overwrite unowned file: $Destination"
+                }
+            }
+        }
+        if ($AllowPip -and -not $NoDeps) {
+            Assert-SafeRecursiveTree $VenvDir
+            $VenvItem = Get-Item -LiteralPath $VenvDir -Force -ErrorAction SilentlyContinue
+            if ($null -ne $VenvItem -and
+                (-not $VenvItem.PSIsContainer -or -not $PriorRecursiveDirs.Contains($VenvDir))) {
+                throw "Refusing to reuse unowned managed environment: $VenvDir"
+            }
+        }
+
+        # All conflict checks passed.  Recheck each destination immediately
+        # before copying so a concurrent replacement cannot bypass the guard.
+        New-Item -ItemType Directory -Path $SkillBase -Force | Out-Null
+        New-Item -ItemType Directory -Path $AgentDirResolved -Force | Out-Null
+        $OwnedPlannedDirs = [System.Collections.Generic.HashSet[string]]::new($StringComparer)
+        foreach ($Directory in @($PlannedDirs | Sort-Object Length)) {
+            [void](Assert-NoReparseChain $Directory)
+            $DirectoryItem = Get-Item -LiteralPath $Directory -Force -ErrorAction SilentlyContinue
+            if ($null -eq $DirectoryItem) {
+                New-Item -ItemType Directory -Path $Directory | Out-Null
+                [void]$OwnedPlannedDirs.Add($Directory)
+            } elseif ($PriorDirectories.Contains($Directory)) {
+                [void]$OwnedPlannedDirs.Add($Directory)
+            }
+        }
+        Write-Host "Installing guarded skill, sub-skill, agent, and runtime files..."
+        foreach ($PlannedFile in $FilePlan) {
+            [void](Assert-NoReparseChain $PlannedFile.Destination)
+            $DestinationItem = Get-Item -LiteralPath $PlannedFile.Destination -Force -ErrorAction SilentlyContinue
+            if ($null -ne $DestinationItem -and
+                ($DestinationItem.PSIsContainer -or -not $PriorFiles.Contains($PlannedFile.Destination))) {
+                throw "Refusing to overwrite unowned file: $($PlannedFile.Destination)"
+            }
+            Copy-Item -LiteralPath $PlannedFile.Source -Destination $PlannedFile.Destination -Force
+        }
+
+        # Commit exact canonical ownership before dependency installation so a
+        # later pip failure remains recoverable with uninstall.  Preserve safe
+        # prior entries that disappeared from this distribution (and a managed
+        # runtime during -NoDeps) so an upgrade never strands owned artifacts.
+        $ManifestFiles = [System.Collections.Generic.HashSet[string]]::new($StringComparer)
+        [void]$ManifestFiles.UnionWith($PriorFiles)
+        [void]$ManifestFiles.UnionWith($PlannedFiles)
+        $ManifestDirectories = [System.Collections.Generic.HashSet[string]]::new($StringComparer)
+        [void]$ManifestDirectories.UnionWith($PriorDirectories)
+        [void]$ManifestDirectories.UnionWith($OwnedPlannedDirs)
+        $ManifestRecursiveDirs = [System.Collections.Generic.HashSet[string]]::new($StringComparer)
+        [void]$ManifestRecursiveDirs.UnionWith($PriorRecursiveDirs)
+        [void]$ManifestRecursiveDirs.UnionWith($RecursiveDirs)
         $Manifest = @{
             version = 1
             target = $Target
-            files = @($OwnedFiles)
-            directories = @($OwnedDirs)
-            recursive_directories = @($RecursiveDirs)
+            files = @($ManifestFiles | Sort-Object)
+            directories = @($ManifestDirectories | Sort-Object)
+            recursive_directories = @($ManifestRecursiveDirs | Sort-Object)
         }
-        $Manifest | ConvertTo-Json -Depth 4 | Set-Content -Path $ManifestPath -Encoding UTF8
+        $ManifestTemp = Join-Path $SkillBase (".claude-ads-manifest-" + [IO.Path]::GetRandomFileName())
+        $Manifest | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $ManifestTemp -Encoding UTF8
+        Move-Item -LiteralPath $ManifestTemp -Destination $ManifestPath -Force
+        Assert-CurrentUserOwnedFile $ManifestPath
         Write-Host "OK Ownership manifest: $ManifestPath" -ForegroundColor Green
 
         Write-Host ""
         if ($AllowPip -and -not $NoDeps) {
-            $ReceiptPath = Join-Path $SkillDirResolved "managed-runtime-receipt.json"
-            Remove-Item $ReceiptPath -Force -ErrorAction SilentlyContinue
+            Remove-Item -LiteralPath $ReceiptPath -Force -ErrorAction SilentlyContinue
             Write-Host "Installing exact hashed Python dependencies into a managed virtual environment..."
             $ErrorActionPreference = "Continue"
             if ($ManagedPython) {
+                Assert-SafeRecursiveTree $VenvDir
                 & $ManagedPython.Source -m venv $VenvDir
                 if ($LASTEXITCODE -eq 0) {
                     & "$VenvDir\Scripts\python.exe" -m pip install -q --ignore-installed --report "$VenvDir\install-report.json" --require-hashes --only-binary=:all: -r "$SkillDirResolved\requirements.lock"
@@ -340,8 +643,17 @@ function Main {
             if ($ManagedPython -and $LASTEXITCODE -eq 0) {
                 Write-Host "  OK Exact locked Python dependencies installed in $VenvDir" -ForegroundColor Green
             } else {
-                Remove-Item $VenvDir -Recurse -Force -ErrorAction SilentlyContinue
-                Remove-Item $ReceiptPath -Force -ErrorAction SilentlyContinue
+                $CleanupRefused = $null
+                try {
+                    Assert-SafeRecursiveTree $VenvDir
+                    Remove-Item -LiteralPath $VenvDir -Recurse -Force -ErrorAction SilentlyContinue
+                } catch {
+                    $CleanupRefused = $_.Exception.Message
+                }
+                Remove-Item -LiteralPath $ReceiptPath -Force -ErrorAction SilentlyContinue
+                if ($CleanupRefused) {
+                    throw "Exact hashed dependency installation failed; unsafe managed environment cleanup was refused: $CleanupRefused"
+                }
                 throw "Exact hashed dependency installation failed; no moving-range fallback was attempted."
             }
             $ErrorActionPreference = "Stop"
